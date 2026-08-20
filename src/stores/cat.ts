@@ -11,6 +11,11 @@ export interface CatStore {
     maxFPS: number
     ignoreMouse: boolean
   }
+  pet: {
+    enabled: boolean
+    activationDelayMs?: number
+    mouseInteractions: boolean
+  }
   window: {
     visible: boolean
     passThrough: boolean
@@ -58,6 +63,12 @@ export const useCatStore = defineStore('cat', () => {
     ignoreMouse: false,
   })
 
+  const pet = reactive<CatStore['pet']>({
+    enabled: true,
+    activationDelayMs: void 0,
+    mouseInteractions: true,
+  })
+
   const window = reactive<CatStore['window']>({
     visible: true,
     passThrough: false,
@@ -88,6 +99,7 @@ export const useCatStore = defineStore('cat', () => {
   return {
     migrated,
     model,
+    pet,
     window,
     init,
   }

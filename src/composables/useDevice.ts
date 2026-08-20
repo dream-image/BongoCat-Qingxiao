@@ -11,6 +11,7 @@ import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
 import { useModelStore } from '@/stores/model'
 import { inBetween } from '@/utils/is'
+import modelRuntime from '@/utils/model-runtime'
 import { isMac, isWindows } from '@/utils/platform'
 
 import { INVOKE_KEY, LISTEN_KEY, WINDOW_LABEL } from '../constants'
@@ -40,6 +41,11 @@ interface KeyboardEvent {
   }
 }
 
+interface DeviceListenerStatus {
+  state: 'unavailable' | 'starting' | 'ready'
+  error?: string | null
+}
+
 type DeviceEvent = MouseButtonEvent | MouseMoveEvent | KeyboardEvent
 
 const DAMPING_DECAY = 0.75
@@ -48,6 +54,8 @@ const appWindow = getCurrentWebviewWindow()
 export function useDevice() {
   const modelStore = useModelStore()
   const releaseTimers = new Map<string, NodeJS.Timeout>()
+  const pressedKeyboardKeys = new Set<string>()
+  const pressedMouseButtons = new Set<string>()
   const appStore = useAppStore()
   const catStore = useCatStore()
   const latestCursorPoint = ref<CursorPoint>()
@@ -55,6 +63,29 @@ export function useDevice() {
   const scaleFactor = ref(1)
   const { handlePress, handleRelease, handleMouseChange, handleMouseMove } = useModel()
   let unmounted = false
+
+  const clearReleaseTimers = () => {
+    for (const timer of releaseTimers.values()) clearTimeout(timer)
+
+    releaseTimers.clear()
+  }
+
+  const releaseInputState = () => {
+    clearReleaseTimers()
+
+    const keyboardKeys = new Set([
+      ...pressedKeyboardKeys,
+      ...Object.keys(modelStore.pressedKeys),
+    ])
+
+    pressedKeyboardKeys.clear()
+
+    for (const key of keyboardKeys) handleRelease(key)
+
+    for (const button of pressedMouseButtons) handleMouseChange(button, false)
+
+    pressedMouseButtons.clear()
+  }
 
   const tickerCallback = (ticker: Ticker) => {
     const destination = latestCursorPoint.value
@@ -93,11 +124,25 @@ export function useDevice() {
 
   onUnmounted(() => {
     unmounted = true
+    releaseInputState()
+    modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
     Ticker.shared.remove(tickerCallback)
+  })
+
+  watch(() => modelStore.currentModel, () => {
+    clearReleaseTimers()
+    pressedKeyboardKeys.clear()
+    pressedMouseButtons.clear()
   })
 
   watch(() => catStore.model.ignoreMouse, (value) => {
     if (value) {
+      for (const button of pressedMouseButtons) {
+        handleMouseChange(button, false)
+      }
+
+      pressedMouseButtons.clear()
+
       return Ticker.shared.remove(tickerCallback)
     }
 
@@ -110,25 +155,6 @@ export function useDevice() {
       if (await checkInputMonitoringPermission()) return true
 
       await new Promise<void>(resolve => setTimeout(resolve, 1000))
-    }
-  }
-
-  const startListening = async () => {
-    try {
-      if (isMac && !await checkInputMonitoringPermission()) {
-        await requestInputMonitoringPermission()
-
-        if (!await waitForInputMonitoringPermission()) return
-      }
-
-      await invoke(INVOKE_KEY.START_DEVICE_LISTENING)
-    } catch (reason) {
-      const message = reason instanceof Error ? reason.message : String(reason)
-
-      console.error('Failed to start device listening:', reason)
-      void error(`Failed to start device listening: ${message}`).catch((logReason) => {
-        console.error('Failed to write device listening error log:', logReason)
-      })
     }
   }
 
@@ -201,6 +227,7 @@ export function useDevice() {
   }
 
   const handleAutoRelease = (key: string, delay = 100, label?: string | null) => {
+    pressedKeyboardKeys.add(key)
     handlePress(key, label)
 
     if (releaseTimers.has(key)) {
@@ -208,6 +235,7 @@ export function useDevice() {
     }
 
     const timer = setTimeout(() => {
+      pressedKeyboardKeys.delete(key)
       handleRelease(key)
 
       releaseTimers.delete(key)
@@ -216,7 +244,7 @@ export function useDevice() {
     releaseTimers.set(key, timer)
   }
 
-  useTauriListen<DeviceEvent>(LISTEN_KEY.DEVICE_CHANGED, ({ payload }) => {
+  const deviceListenerReady = useTauriListen<DeviceEvent>(LISTEN_KEY.DEVICE_CHANGED, ({ payload }) => {
     const { kind, value } = payload
 
     if (kind === 'KeyboardPress' || kind === 'KeyboardRelease') {
@@ -237,21 +265,79 @@ export function useDevice() {
           return handleAutoRelease(nextValue, delay, label)
         }
 
+        pressedKeyboardKeys.add(nextValue)
+
         return handlePress(nextValue, label)
       }
+
+      pressedKeyboardKeys.delete(nextValue)
 
       return handleRelease(nextValue)
     }
 
     switch (kind) {
       case 'MousePress':
+        if (catStore.model.ignoreMouse) return
+
+        pressedMouseButtons.add(value)
+
         return handleMouseChange(value)
       case 'MouseRelease':
+        if (catStore.model.ignoreMouse) return
+
+        pressedMouseButtons.delete(value)
+
         return handleMouseChange(value, false)
       case 'MouseMove':
         return latestCursorPoint.value = value
     }
   })
+
+  const deviceStatusListenerReady = useTauriListen<DeviceListenerStatus>(
+    LISTEN_KEY.DEVICE_LISTENER_STATUS,
+    ({ payload }) => {
+      if (payload.state === 'unavailable') releaseInputState()
+
+      modelRuntime.updatePetRuntimeContext({ inputStatus: payload.state })
+
+      if (!payload.error) return
+
+      console.error(payload.error)
+      void error(payload.error).catch((logReason) => {
+        console.error('Failed to write device listening error log:', logReason)
+      })
+    },
+  )
+
+  const startListening = async () => {
+    modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+
+    try {
+      await Promise.all([deviceListenerReady, deviceStatusListenerReady])
+
+      if (unmounted) return
+
+      if (isMac && !await checkInputMonitoringPermission()) {
+        await requestInputMonitoringPermission()
+
+        if (!await waitForInputMonitoringPermission()) return
+      }
+
+      if (unmounted) return
+
+      await invoke(INVOKE_KEY.START_DEVICE_LISTENING)
+    } catch (reason) {
+      releaseInputState()
+      modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+
+      const message = reason instanceof Error ? reason.message : String(reason)
+
+      console.error('Failed to start device listening:', reason)
+      void error(`Failed to start device listening: ${message}`).catch((logReason) => {
+        console.error('Failed to write device listening error log:', logReason)
+      })
+    }
+  }
 
   return {
     startListening,

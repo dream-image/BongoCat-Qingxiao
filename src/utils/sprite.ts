@@ -1,7 +1,16 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 
+import type {
+  PetBehaviorConfig,
+  PetPlaybackEndReason,
+  PetPlaybackHandle,
+  PetPlaybackResult,
+  PetPlayOptions,
+} from './pet-behavior'
+
 import { join } from './path'
+import { assertPetBehaviorConfig } from './pet-behavior'
 
 export interface SpriteAnimationConfig {
   file: string
@@ -19,6 +28,10 @@ export type SpriteKeyboardBinding = string | string[]
 export interface SpriteBindingsConfig {
   keyboard?: Record<string, SpriteKeyboardBinding>
   mouse?: Record<string, string>
+}
+
+export interface SpriteBehaviorsConfig {
+  pet?: PetBehaviorConfig
 }
 
 export interface SpriteBubbleConfig {
@@ -56,6 +69,7 @@ export interface SpriteModelConfig {
   keyboard?: Record<string, SpriteKeyboardBinding>
   mouse?: Record<string, string>
   bubbles?: Partial<SpriteBubbleConfig>
+  behaviors?: SpriteBehaviorsConfig
 }
 
 export interface SpriteModelSize {
@@ -63,11 +77,18 @@ export interface SpriteModelSize {
   height: number
 }
 
+export type SpritePlaybackEndReason = PetPlaybackEndReason
+export type SpritePlaybackResult = PetPlaybackResult
+export type SpritePlaybackHandle = PetPlaybackHandle
+export type SpritePlayOptions = PetPlayOptions
+
 export interface SpriteModelLoadResult {
   width: number
   height: number
   motions: Record<string, never[]>
   expressions: never[]
+  defaultAnimation: string
+  petBehavior?: PetBehaviorConfig
 }
 
 interface LoadedAnimation {
@@ -79,6 +100,18 @@ interface ActiveBubble {
   text: string
   createdAt: number
   sequence: number
+}
+
+interface ActivePlayback {
+  handle: SpritePlaybackHandle
+  loop: boolean
+  returnTo: string
+  resolve: (result: SpritePlaybackResult) => void
+}
+
+interface PressedInput {
+  kind: 'keyboard' | 'mouse'
+  key: string
 }
 
 const defaultBubbleConfig: SpriteBubbleConfig = {
@@ -107,6 +140,7 @@ class SpriteRenderer {
   private activeAnimation = ''
   private activeFrame = 0
   private animationFinished = false
+  private activePlayback: ActivePlayback | null = null
   private frameStartedAt = 0
   private animationFrameId: number | null = null
   private loadGeneration = 0
@@ -114,6 +148,7 @@ class SpriteRenderer {
   private bindingIndexes = new Map<string, number>()
   private pressedKeyboard = new Map<string, string>()
   private pressedMouse = new Map<string, string>()
+  private pressedInputOrder = new Map<string, PressedInput>()
   private bubbles: ActiveBubble[] = []
   private bubbleConfig: SpriteBubbleConfig = { ...defaultBubbleConfig }
   private bubbleSequence = 0
@@ -146,6 +181,8 @@ class SpriteRenderer {
       height: config.canvas.height,
       motions: {},
       expressions: [],
+      defaultAnimation: config.defaultAnimation,
+      petBehavior: config.behaviors?.pet,
     }
   }
 
@@ -187,16 +224,60 @@ class SpriteRenderer {
     }
   }
 
-  public play(name: string) {
+  public play(name: string, options: SpritePlayOptions = {}): SpritePlaybackHandle | null {
     const animation = this.animations.get(name)
 
-    if (!animation) return false
+    if (!animation) return null
+
+    return this.startPlayback(name, animation.config.loop, options)
+  }
+
+  public triggerKeyboardBinding(key: string): SpritePlaybackHandle | null {
+    const keyboard = this.config?.bindings?.keyboard ?? this.config?.keyboard
+
+    if (!keyboard) return null
+
+    const bindingKey = this.resolveKeyboardBindingKey(keyboard, key)
+    const binding = keyboard[bindingKey]
+
+    if (!binding) return null
+
+    const animationName = this.resolveKeyboardBinding(bindingKey, binding)
+
+    return this.startPlayback(animationName, false)
+  }
+
+  private startPlayback(
+    name: string,
+    loop: boolean,
+    options: SpritePlayOptions = {},
+  ): SpritePlaybackHandle | null {
+    const animation = this.animations.get(name)
+    const returnTo = options.returnTo ?? this.config?.defaultAnimation
+
+    if (!animation || !returnTo || !this.animations.has(returnTo)) return null
+
+    this.settleActivePlayback('interrupted')
 
     this.stopAnimationFrame()
+
+    let resolveFinished!: (result: SpritePlaybackResult) => void
+    const handle: SpritePlaybackHandle = {
+      animation: name,
+      finished: new Promise((resolve) => {
+        resolveFinished = resolve
+      }),
+    }
 
     this.activeAnimation = name
     this.activeFrame = 0
     this.animationFinished = false
+    this.activePlayback = {
+      handle,
+      loop,
+      returnTo,
+      resolve: resolveFinished,
+    }
     const timestamp = performance.now()
 
     this.frameStartedAt = timestamp
@@ -205,63 +286,176 @@ class SpriteRenderer {
 
     this.ensureAnimationFrame()
 
-    return true
+    return handle
   }
 
-  public handleKeyboard(key: string, pressed: boolean, label?: string) {
+  public showKeyboardBubble(key: string, label?: string) {
+    return this.showBubble(key, label)
+  }
+
+  public hasKeyboardBinding(key: string) {
+    const keyboard = this.config?.bindings?.keyboard ?? this.config?.keyboard
+
+    if (!keyboard) return false
+
+    const bindingKey = this.resolveKeyboardBindingKey(keyboard, key)
+
+    return Boolean(keyboard[bindingKey])
+  }
+
+  public handleKeyboardBinding(key: string, pressed: boolean, restore = true) {
     const keyboard = this.config?.bindings?.keyboard ?? this.config?.keyboard
 
     if (!pressed) {
-      if (!keyboard) return false
-
       const animationName = this.pressedKeyboard.get(key)
 
       this.pressedKeyboard.delete(key)
+      this.removePressedInput('keyboard', key)
 
-      return this.releaseBinding(animationName)
+      if (!keyboard) return false
+
+      if (!restore) return animationName !== void 0
+
+      return this.releaseBinding(animationName, () => {
+        return this.resumePressedInputBinding()
+      })
     }
 
-    if (!keyboard) {
-      return this.showBubble(key, label)
-    }
+    if (!keyboard) return false
 
     const bindingKey = this.resolveKeyboardBindingKey(keyboard, key)
     const binding = keyboard[bindingKey]
 
-    if (!binding) {
-      return this.showBubble(key, label)
-    }
+    if (!binding) return false
+
+    this.pressedKeyboard.delete(key)
 
     const animationName = this.resolveKeyboardBinding(bindingKey, binding)
 
     this.pressedKeyboard.set(key, animationName)
+    this.touchPressedInput('keyboard', key)
 
-    const animationPlayed = this.play(animationName)
-    const bubbleShown = this.showBubble(key, label)
+    return this.startPressedInputBinding(animationName)
+  }
+
+  public markKeyboardBindingPressed(key: string) {
+    if (!this.hasKeyboardBinding(key)) return false
+
+    this.touchPressedInput('keyboard', key)
+
+    return true
+  }
+
+  public syncPressedKeyboardBindings(keys: readonly string[]) {
+    const keyboard = this.config?.bindings?.keyboard ?? this.config?.keyboard
+    const nextKeys = new Set(keys)
+
+    for (const key of this.pressedKeyboard.keys()) {
+      if (nextKeys.has(key)) continue
+
+      this.pressedKeyboard.delete(key)
+      this.removePressedInput('keyboard', key)
+    }
+
+    for (const input of Array.from(this.pressedInputOrder.values())) {
+      if (input.kind === 'keyboard' && !nextKeys.has(input.key)) {
+        this.removePressedInput('keyboard', input.key)
+      }
+    }
+
+    if (!keyboard) {
+      this.pressedKeyboard.clear()
+
+      for (const input of Array.from(this.pressedInputOrder.values())) {
+        if (input.kind === 'keyboard') this.removePressedInput('keyboard', input.key)
+      }
+
+      return false
+    }
+
+    for (const key of keys) {
+      if (this.pressedKeyboard.has(key)) {
+        if (!this.hasPressedInput('keyboard', key)) {
+          this.touchPressedInput('keyboard', key)
+        }
+
+        continue
+      }
+
+      const bindingKey = this.resolveKeyboardBindingKey(keyboard, key)
+      const binding = keyboard[bindingKey]
+
+      if (!binding) continue
+
+      this.pressedKeyboard.set(
+        key,
+        this.resolveKeyboardBinding(bindingKey, binding),
+      )
+
+      if (!this.hasPressedInput('keyboard', key)) {
+        this.touchPressedInput('keyboard', key)
+      }
+    }
+
+    return this.pressedKeyboard.size > 0
+  }
+
+  public playPressedKeyboardBinding(key: string) {
+    const animationName = this.pressedKeyboard.get(key)
+
+    return animationName
+      ? this.startPressedInputBinding(animationName)
+      : false
+  }
+
+  public resumePressedInputBinding() {
+    const animationName = this.lastPressedLoopingAnimation()
+
+    if (!animationName) return this.playDefault()
+    if (animationName === this.activeAnimation && !this.animationFinished) return true
+
+    return this.startPressedInputBinding(animationName)
+  }
+
+  public handleKeyboard(key: string, pressed: boolean, label?: string) {
+    const animationPlayed = this.handleKeyboardBinding(key, pressed)
+
+    if (!pressed) return animationPlayed
+
+    const bubbleShown = this.showKeyboardBubble(key, label)
 
     return animationPlayed || bubbleShown
   }
 
-  public handleMouse(button: string, pressed: boolean) {
+  public handleMouse(button: string, pressed: boolean, restore = true) {
     const mouse = this.config?.bindings?.mouse ?? this.config?.mouse
-
-    if (!mouse) return false
 
     if (!pressed) {
       const animationName = this.pressedMouse.get(button)
 
       this.pressedMouse.delete(button)
+      this.removePressedInput('mouse', button)
 
-      return this.releaseBinding(animationName)
+      if (!mouse) return false
+
+      if (!restore) return animationName !== void 0
+
+      return this.releaseBinding(animationName, () => {
+        return this.resumePressedInputBinding()
+      })
     }
+
+    if (!mouse) return false
 
     const animationName = mouse[button] ?? mouse['*']
 
     if (!animationName) return false
 
+    this.pressedMouse.delete(button)
     this.pressedMouse.set(button, animationName)
+    this.touchPressedInput('mouse', button)
 
-    return this.play(animationName)
+    return this.startPressedInputBinding(animationName)
   }
 
   public setMaxFPS(fps: number) {
@@ -311,7 +505,7 @@ class SpriteRenderer {
           continue
         }
 
-        if (animation.config.loop) {
+        if (this.activePlayback?.loop) {
           this.activeFrame = 0
           this.renderPending = true
 
@@ -321,8 +515,18 @@ class SpriteRenderer {
         this.animationFinished = true
         animationFinishedNow = true
 
-        if (this.activeAnimation !== this.config?.defaultAnimation) {
-          this.playDefault()
+        const completedAnimation = this.activeAnimation
+        const completedPlaybackLoop = this.activePlayback?.loop
+        const returnTo = this.activePlayback?.returnTo
+        const shouldReturn = Boolean(returnTo
+          && (returnTo !== completedAnimation
+            || (completedPlaybackLoop === false
+              && this.animations.get(returnTo)?.config.loop)))
+
+        this.settleActivePlayback('finished')
+
+        if (returnTo && shouldReturn) {
+          this.play(returnTo)
 
           return
         }
@@ -841,22 +1045,67 @@ class SpriteRenderer {
     return binding[index % binding.length]
   }
 
-  private releaseBinding(animationName?: string) {
+  private releaseBinding(animationName: string | undefined, resume: () => boolean) {
     if (!animationName || animationName !== this.activeAnimation) return false
 
     const animation = this.animations.get(animationName)
 
     if (!animation?.config.loop) return false
 
-    return this.playDefault()
+    return resume()
+  }
+
+  private lastPressedLoopingAnimation() {
+    const inputs = Array.from(this.pressedInputOrder.values())
+
+    for (let index = inputs.length - 1; index >= 0; index--) {
+      const input = inputs[index]
+      const animationName = input.kind === 'keyboard'
+        ? this.pressedKeyboard.get(input.key)
+        : this.pressedMouse.get(input.key)
+
+      if (animationName && this.animations.get(animationName)?.config.loop) {
+        return animationName
+      }
+    }
+  }
+
+  private startPressedInputBinding(animationName: string) {
+    const playback = this.play(animationName)
+    const animation = this.animations.get(animationName)
+
+    if (!playback) return false
+    if (animation?.config.loop) return true
+
+    void playback.finished.then((result) => {
+      if (result.reason === 'finished') this.resumePressedInputBinding()
+    })
+
+    return true
+  }
+
+  private touchPressedInput(kind: PressedInput['kind'], key: string) {
+    const id = `${kind}:${key}`
+
+    this.pressedInputOrder.delete(id)
+    this.pressedInputOrder.set(id, { kind, key })
+  }
+
+  private removePressedInput(kind: PressedInput['kind'], key: string) {
+    this.pressedInputOrder.delete(`${kind}:${key}`)
+  }
+
+  private hasPressedInput(kind: PressedInput['kind'], key: string) {
+    return this.pressedInputOrder.has(`${kind}:${key}`)
   }
 
   private playDefault() {
     const defaultAnimation = this.config?.defaultAnimation
 
     if (!defaultAnimation) return false
+    if (defaultAnimation === this.activeAnimation && !this.animationFinished) return true
 
-    return this.play(defaultAnimation)
+    return Boolean(this.play(defaultAnimation))
   }
 
   private ensureAnimationFrame() {
@@ -873,7 +1122,7 @@ class SpriteRenderer {
 
     if (!animation || this.animationFinished) return false
 
-    return animation.config.frames > 1 || !animation.config.loop
+    return animation.config.frames > 1 || this.activePlayback?.loop === false
   }
 
   private stopAnimationFrame() {
@@ -887,6 +1136,8 @@ class SpriteRenderer {
   private reset() {
     this.stopAnimationFrame()
 
+    this.settleActivePlayback('destroyed')
+
     this.context?.clearRect(0, 0, this.canvas?.width ?? 0, this.canvas?.height ?? 0)
 
     this.canvas = null
@@ -896,15 +1147,26 @@ class SpriteRenderer {
     this.activeAnimation = ''
     this.activeFrame = 0
     this.animationFinished = false
+    this.activePlayback = null
     this.frameStartedAt = 0
     this.bindingIndexes.clear()
     this.pressedKeyboard.clear()
     this.pressedMouse.clear()
+    this.pressedInputOrder.clear()
     this.bubbles = []
     this.bubbleConfig = { ...defaultBubbleConfig }
     this.bubbleSequence = 0
     this.lastRenderAt = Number.NEGATIVE_INFINITY
     this.renderPending = false
+  }
+
+  private settleActivePlayback(reason: SpritePlaybackEndReason) {
+    const playback = this.activePlayback
+
+    if (!playback) return
+
+    this.activePlayback = null
+    playback.resolve({ reason })
   }
 
   private async readAndValidateModel(path: string) {
@@ -973,12 +1235,17 @@ class SpriteRenderer {
     }
 
     if (typeof candidate.defaultAnimation !== 'string'
-      || !candidate.animations[candidate.defaultAnimation]) {
+      || candidate.defaultAnimation.trim().length === 0
+      || !Object.prototype.hasOwnProperty.call(
+        candidate.animations,
+        candidate.defaultAnimation,
+      )) {
       throw new Error('Sprite model default animation is invalid')
     }
 
     for (const [name, animation] of Object.entries(candidate.animations)) {
-      if (!animation || !this.isRelativeAssetPath(animation.file)
+      if (name.trim().length === 0
+        || !animation || !this.isRelativeAssetPath(animation.file)
         || !this.isPositiveInteger(animation.frameWidth)
         || !this.isPositiveInteger(animation.frameHeight)
         || !this.isPositiveInteger(animation.frames)
@@ -996,6 +1263,17 @@ class SpriteRenderer {
       }
     }
 
+    if (candidate.behaviors !== undefined
+      && (!candidate.behaviors || typeof candidate.behaviors !== 'object'
+        || Array.isArray(candidate.behaviors))) {
+      throw new TypeError('Sprite model behaviors are invalid')
+    }
+
+    assertPetBehaviorConfig(candidate.behaviors?.pet, {
+      animations: candidate.animations,
+      canvas: candidate.canvas,
+    })
+
     if (candidate.bindings !== undefined
       && (!candidate.bindings || typeof candidate.bindings !== 'object'
         || Array.isArray(candidate.bindings))) {
@@ -1012,12 +1290,17 @@ class SpriteRenderer {
     for (const [key, binding] of Object.entries(keyboard ?? {})) {
       const animationNames = typeof binding === 'string' ? [binding] : binding
 
-      if (!Array.isArray(animationNames) || animationNames.length === 0
-        || animationNames.some(item => typeof item !== 'string')) {
+      if (key.trim().length === 0
+        || !Array.isArray(animationNames) || animationNames.length === 0
+        || animationNames.some((item) => {
+          return typeof item !== 'string' || item.trim().length === 0
+        })) {
         throw new Error(`Sprite keyboard binding "${key}" is invalid`)
       }
 
-      if (animationNames.some(name => !candidate.animations?.[name])) {
+      if (animationNames.some((name) => {
+        return !Object.prototype.hasOwnProperty.call(candidate.animations, name)
+      })) {
         throw new Error(`Sprite keyboard binding "${key}" references a missing animation`)
       }
     }
@@ -1030,11 +1313,13 @@ class SpriteRenderer {
     }
 
     for (const [button, binding] of Object.entries(mouse ?? {})) {
-      if (typeof binding !== 'string') {
+      if (button.trim().length === 0
+        || typeof binding !== 'string'
+        || binding.trim().length === 0) {
         throw new TypeError(`Sprite mouse binding "${button}" is invalid`)
       }
 
-      if (!candidate.animations[binding]) {
+      if (!Object.prototype.hasOwnProperty.call(candidate.animations, binding)) {
         throw new Error(`Sprite mouse binding "${button}" references a missing animation`)
       }
     }

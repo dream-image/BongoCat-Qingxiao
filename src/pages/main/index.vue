@@ -16,6 +16,7 @@ import { useAppMenu } from '@/composables/useAppMenu'
 import { useDevice } from '@/composables/useDevice'
 import { useGamepad } from '@/composables/useGamepad'
 import { useModel } from '@/composables/useModel'
+import { usePetPointer } from '@/composables/usePetPointer'
 import { useTauriListen } from '@/composables/useTauriListen'
 import { LISTEN_KEY } from '@/constants'
 import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/plugins/window'
@@ -31,6 +32,10 @@ import { clearObject } from '@/utils/shared'
 const { startListening } = useDevice()
 const appWindow = getCurrentWebviewWindow()
 const { modelSize, handleLoad, handleDestroy, handleResize, handleKeyChange } = useModel()
+const petPointer = usePetPointer(
+  () => modelSize.value,
+  () => appWindow.startDragging(),
+)
 const catStore = useCatStore()
 const { getBaseMenu, getExitMenu } = useAppMenu()
 const modelStore = useModelStore()
@@ -44,6 +49,7 @@ onMounted(startListening)
 
 onUnmounted(() => {
   ++modelLoadGeneration
+  petPointer.reset()
   handleDestroy()
 })
 
@@ -62,6 +68,7 @@ useEventListener('resize', () => {
 watch(() => modelStore.currentModel, async (model) => {
   const generation = ++modelLoadGeneration
 
+  petPointer.reset()
   modelStore.modelReady = false
   backgroundImagePath.value = void 0
   clearObject([modelStore.supportKeys, modelStore.pressedKeys])
@@ -82,9 +89,7 @@ watch(() => modelStore.currentModel, async (model) => {
       && current.renderer === renderer
   }
 
-  await handleLoad()
-
-  if (!isCurrent()) return
+  if (!await handleLoad() || !isCurrent()) return
 
   const path = join(model.path, 'resources', 'background.png')
 
@@ -146,6 +151,27 @@ watch(() => catStore.window.visible, async (value) => {
   value ? showWindow() : hideWindow()
 })
 
+watch([
+  () => catStore.pet.enabled,
+  () => catStore.pet.activationDelayMs,
+  () => catStore.pet.mouseInteractions,
+  () => catStore.window.visible,
+  () => catStore.model.ignoreMouse,
+  () => catStore.window.passThrough,
+  () => catStore.window.hideOnHover,
+], ([enabled, activationDelayMs, mouseInteractions, visible, ignoreMouse, passThrough, hideOnHover]) => {
+  const interactionEnabled = mouseInteractions && !ignoreMouse && !passThrough && !hideOnHover
+
+  if (!enabled || !visible || !interactionEnabled) petPointer.reset()
+
+  modelRuntime.updatePetRuntimeContext({
+    enabled,
+    activationDelayMs,
+    visible,
+    mouseInteractions: interactionEnabled,
+  })
+}, { immediate: true })
+
 watch(() => catStore.window.passThrough, (value) => {
   appWindow.setIgnoreCursorEvents(value)
 }, { immediate: true })
@@ -168,8 +194,16 @@ useTauriListen<number>(LISTEN_KEY.SET_EXPRESSION, ({ payload }) => {
   modelRuntime.setExpression(payload)
 })
 
-function handleMouseDown() {
+function handleMouseDown(event: MouseEvent) {
+  if (event.button !== 0 || petPointer.isCapturing()) return
+
   appWindow.startDragging()
+}
+
+function handlePointerDown(event: PointerEvent) {
+  if (!petPointer.handlePointerDown(event)) return
+
+  event.preventDefault()
 }
 
 async function handleContextmenu(event: MouseEvent) {
@@ -221,6 +255,11 @@ function handleMouseMove(event: MouseEvent) {
     @contextmenu="handleContextmenu"
     @mousedown="handleMouseDown"
     @mousemove="handleMouseMove"
+    @pointercancel="petPointer.handlePointerCancel"
+    @pointerdown="handlePointerDown"
+    @pointerleave="petPointer.handlePointerLeave"
+    @pointermove="petPointer.handlePointerMove"
+    @pointerup="petPointer.handlePointerUp"
   >
     <img
       v-if="backgroundImagePath"

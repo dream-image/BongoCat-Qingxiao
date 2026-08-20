@@ -6,6 +6,7 @@ export const LISTEN_KEY = {
   SHOW_WINDOW: 'show-window',
   HIDE_WINDOW: 'hide-window',
   DEVICE_CHANGED: 'device-changed',
+  DEVICE_LISTENER_STATUS: 'device-listener-status',
   UPDATE_APP: 'update-app',
   GAMEPAD_CHANGED: 'gamepad-changed',
   START_MOTION: 'start-motion',

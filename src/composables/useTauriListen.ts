@@ -1,15 +1,39 @@
 import { listen } from '@tauri-apps/api/event'
 import { noop } from '@vueuse/core'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 
 export function useTauriListen<T>(...args: Parameters<typeof listen<T>>) {
-  const unlisten = ref(noop)
+  let disposed = false
+  let unlisten = noop
+  let resolveReady = noop
+  let rejectReady: (reason?: unknown) => void = noop
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve
+    rejectReady = reject
+  })
+
+  void ready.catch(noop)
 
   onMounted(async () => {
-    unlisten.value = await listen<T>(...args)
+    try {
+      const nextUnlisten = await listen<T>(...args)
+
+      if (disposed) {
+        nextUnlisten()
+      } else {
+        unlisten = nextUnlisten
+      }
+
+      resolveReady()
+    } catch (reason) {
+      rejectReady(reason)
+    }
   })
 
   onUnmounted(() => {
-    unlisten.value()
+    disposed = true
+    unlisten()
   })
+
+  return ready
 }

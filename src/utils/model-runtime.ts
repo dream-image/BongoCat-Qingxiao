@@ -2,13 +2,24 @@ import type { MotionInfo } from 'easy-live2d'
 
 import type { ModelRenderer } from '@/stores/model'
 
+import type { PetBehaviorRuntimeContext, PetInteractionInput, PetPoint } from './pet-behavior'
+
 import live2d from './live2d'
+import { PetBehaviorController } from './pet-behavior'
 import sprite from './sprite'
 
 class ModelRuntime {
   private renderer: ModelRenderer = 'live2d'
   private mirrored = false
   private loadGeneration = 0
+  private petExitGeneration = 0
+  private pendingSpriteBinding: string | undefined
+  private readonly pressedSpriteBindings = new Set<string>()
+  private readonly petBehavior = new PetBehaviorController(void 0, {
+    driver: {
+      play: (animation, options) => sprite.play(animation, options),
+    },
+  })
 
   public async load(path: string, renderer: ModelRenderer) {
     const generation = ++this.loadGeneration
@@ -17,15 +28,25 @@ class ModelRuntime {
 
     this.renderer = renderer
 
-    const result = renderer === 'live2d'
-      ? await live2d.load(path)
-      : await sprite.load(path)
+    if (renderer === 'live2d') {
+      const result = await live2d.load(path)
+
+      if (generation !== this.loadGeneration) {
+        throw new DOMException('Model load was superseded', 'AbortError')
+      }
+
+      return result
+    }
+
+    const result = await sprite.load(path)
 
     if (generation !== this.loadGeneration) {
       throw new DOMException('Model load was superseded', 'AbortError')
     }
 
-    if (renderer === 'sprite') sprite.setMirrored(this.mirrored)
+    sprite.setMirrored(this.mirrored)
+    this.petBehavior.configure(result.petBehavior, result.defaultAnimation)
+    this.petBehavior.start()
 
     return result
   }
@@ -70,13 +91,84 @@ class ModelRuntime {
   public handleKeyboard(key: string, pressed: boolean, label?: string | null) {
     if (this.renderer !== 'sprite') return
 
-    return sprite.handleKeyboard(key, pressed, label ?? void 0)
+    if (!this.petBehavior.hasConfig) {
+      return sprite.handleKeyboard(key, pressed, label ?? void 0)
+    }
+
+    if (!pressed) {
+      this.pressedSpriteBindings.delete(key)
+
+      return sprite.handleKeyboardBinding(key, false, !this.petBehavior.isPetActive)
+    }
+
+    const hasBinding = sprite.hasKeyboardBinding(key)
+
+    if (hasBinding) {
+      this.pressedSpriteBindings.delete(key)
+      this.pressedSpriteBindings.add(key)
+    }
+
+    const bubbleShown = sprite.showKeyboardBubble(key, label ?? void 0)
+    const exitingPet = this.petBehavior.notifyKeyboardPress()
+
+    if (!exitingPet) {
+      return sprite.handleKeyboardBinding(key, true) || bubbleShown
+    }
+
+    if (hasBinding) {
+      this.pendingSpriteBinding = key
+      sprite.markKeyboardBindingPressed(key)
+    }
+
+    const generation = ++this.petExitGeneration
+
+    void this.playPendingBindingAfterPetExit(generation)
+
+    return true
   }
 
   public handleMouse(button: string, pressed: boolean) {
     if (this.renderer !== 'sprite') return
+    if (this.petBehavior.isPetActive) {
+      return pressed ? false : sprite.handleMouse(button, false, false)
+    }
 
     return sprite.handleMouse(button, pressed)
+  }
+
+  public updatePetRuntimeContext(context: Partial<PetBehaviorRuntimeContext>) {
+    if (context.enabled === false
+      || context.visible === false
+      || context.inputStatus === 'unavailable') {
+      this.petExitGeneration++
+      this.pendingSpriteBinding = void 0
+    }
+
+    this.petBehavior.updateContext(context)
+  }
+
+  public hitTestPetPointer(point: PetPoint) {
+    if (this.renderer !== 'sprite' || !this.petBehavior.isPetActive) return []
+
+    return this.petBehavior.hitTest(point)
+  }
+
+  public resolvePetInteraction(input: PetInteractionInput) {
+    if (this.renderer !== 'sprite' || !this.petBehavior.isPetActive) return
+
+    return this.petBehavior.resolveInteraction(input)
+  }
+
+  public isPetPointerBlocked() {
+    return this.renderer === 'sprite'
+      && this.petBehavior.isPetActive
+      && !this.canReceivePetPointer()
+  }
+
+  public handlePetInteraction(input: PetInteractionInput) {
+    if (this.renderer !== 'sprite') return false
+
+    return this.petBehavior.dispatchInteraction(input)
   }
 
   public readonly setMotionSoundEnabled = (enabled: boolean) => {
@@ -94,8 +186,64 @@ class ModelRuntime {
   }
 
   private destroyRenderers() {
+    this.petBehavior.stop()
+    this.petBehavior.configure()
+    this.petExitGeneration++
+    this.pendingSpriteBinding = void 0
+    this.pressedSpriteBindings.clear()
     live2d.destroy()
     sprite.destroy()
+  }
+
+  private async playPendingBindingAfterPetExit(generation: number) {
+    await this.petBehavior.exitForInput()
+
+    if (generation !== this.petExitGeneration
+      || this.renderer !== 'sprite'
+      || !this.petBehavior.hasConfig) {
+      return
+    }
+
+    const key = this.pendingSpriteBinding
+    this.pendingSpriteBinding = void 0
+
+    sprite.syncPressedKeyboardBindings([...this.pressedSpriteBindings])
+
+    if (!key) {
+      sprite.resumePressedInputBinding()
+
+      return
+    }
+
+    if (this.pressedSpriteBindings.has(key)) {
+      sprite.playPressedKeyboardBinding(key)
+
+      return
+    }
+
+    const playback = sprite.triggerKeyboardBinding(key)
+
+    if (!playback) {
+      sprite.resumePressedInputBinding()
+
+      return
+    }
+
+    const result = await playback.finished
+
+    if (result.reason !== 'finished'
+      || generation !== this.petExitGeneration
+      || this.renderer !== 'sprite'
+      || !this.petBehavior.hasConfig) {
+      return
+    }
+
+    sprite.resumePressedInputBinding()
+  }
+
+  private canReceivePetPointer() {
+    return this.petBehavior.state === 'pet-idle'
+      || this.petBehavior.state === 'pet-action'
   }
 }
 
