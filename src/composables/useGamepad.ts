@@ -1,7 +1,7 @@
 import type { LiteralUnion } from 'type-fest'
 
 import { invoke } from '@tauri-apps/api/core'
-import { computed, reactive, watch } from 'vue'
+import { computed, onUnmounted, reactive, watch } from 'vue'
 
 import { INVOKE_KEY, LISTEN_KEY } from '@/constants'
 import { useModelStore } from '@/stores/model'
@@ -78,8 +78,14 @@ export function useGamepad() {
 
     void invoke(gamepadModeActive
       ? INVOKE_KEY.START_GAMEPAD_LISTING
-      : INVOKE_KEY.STOP_GAMEPAD_LISTING)
+      : INVOKE_KEY.STOP_GAMEPAD_LISTING).catch(() => void 0)
   }, { immediate: true })
+
+  onUnmounted(() => {
+    gamepadModeActive = false
+    releaseGamepadState()
+    void invoke(INVOKE_KEY.STOP_GAMEPAD_LISTING).catch(() => void 0)
+  })
 
   watch(() => modelStore.modelReady, (ready) => {
     if (!ready || !gamepadModeActive) return
