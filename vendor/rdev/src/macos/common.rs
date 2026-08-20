@@ -7,8 +7,10 @@ use core_graphics::{
     event::{CGEvent, CGEventFlags, CGEventTapLocation, CGEventType, CGKeyCode, EventField},
     event_source::CGEventSourceStateID,
 };
+use foreign_types::ForeignType;
 use lazy_static::lazy_static;
 use std::convert::TryInto;
+use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::sync::Mutex;
 use std::time::SystemTime;
@@ -22,7 +24,7 @@ pub type CFRunLoopSourceRef = id;
 pub type CFRunLoopRef = id;
 pub type CFRunLoopMode = id;
 pub type CGEventTapProxy = id;
-pub type CGEventRef = CGEvent;
+pub type CGEventRef = core_graphics::sys::CGEventRef;
 pub type FourCharCode = ::std::os::raw::c_uint;
 pub type OSType = FourCharCode;
 pub type PhysicalKeyboardLayoutType = OSType;
@@ -75,7 +77,6 @@ pub const kCGEventMaskForAllEvents: u64 = (1 << CGEventType::LeftMouseDown as u6
 #[cfg(target_os = "macos")]
 #[link(name = "Cocoa", kind = "framework")]
 extern "C" {
-    #[allow(improper_ctypes)]
     pub fn CGEventTapCreate(
         tap: CGEventTapLocation,
         place: CGEventTapPlacement,
@@ -115,6 +116,14 @@ pub type QCallback = unsafe extern "C" fn(
     cg_event: CGEventRef,
     user_info: *mut c_void,
 ) -> CGEventRef;
+
+pub unsafe fn borrow_cg_event(cg_event: CGEventRef) -> Option<ManuallyDrop<CGEvent>> {
+    if cg_event.is_null() {
+        None
+    } else {
+        Some(ManuallyDrop::new(CGEvent::from_ptr(cg_event)))
+    }
+}
 
 #[cfg(target_os = "macos")]
 #[inline]

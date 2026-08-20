@@ -3963,6 +3963,7 @@ dependencies = [
  "dispatch",
  "enum-map",
  "epoll",
+ "foreign-types 0.3.2",
  "inotify 0.10.2",
  "lazy_static",
  "libc",

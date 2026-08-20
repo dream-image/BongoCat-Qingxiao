@@ -1,4 +1,3 @@
-#![allow(improper_ctypes_definitions)]
 use crate::macos::common::*;
 use crate::rdev::{Event, ListenError};
 use cocoa::base::nil;
@@ -88,8 +87,11 @@ unsafe extern "C" fn raw_callback(
         let _callback_guard = CALLBACK_GATE
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(cg_event_ref) = borrow_cg_event(cg_event) else {
+            return;
+        };
         if catch_unwind(AssertUnwindSafe(|| {
-            handle_event(_type, &cg_event);
+            handle_event(_type, &cg_event_ref);
         }))
         .is_err()
         {
@@ -100,7 +102,7 @@ unsafe extern "C" fn raw_callback(
     cg_event
 }
 
-unsafe fn handle_event(event_type: CGEventType, cg_event: &CGEventRef) {
+unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event::CGEvent) {
     if matches!(
         event_type,
         CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput

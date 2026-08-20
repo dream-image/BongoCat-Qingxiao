@@ -1,4 +1,3 @@
-#![allow(improper_ctypes_definitions)]
 use crate::macos::common::*;
 use crate::rdev::{Event, GrabError};
 use cocoa::base::nil;
@@ -14,14 +13,15 @@ unsafe extern "C" fn raw_callback(
     cg_event: CGEventRef,
     _user_info: *mut c_void,
 ) -> CGEventRef {
-    // println!("Event ref {:?}", cg_event_ptr);
-    // let cg_event: CGEvent = transmute_copy::<*mut c_void, CGEvent>(&cg_event_ptr);
+    let Some(cg_event_ref) = borrow_cg_event(cg_event) else {
+        return cg_event;
+    };
     if let Ok(mut state) = KEYBOARD_STATE.lock() {
         if let Some(keyboard) = state.as_mut() {
-            if let Some(event) = convert(_type, &cg_event, keyboard) {
+            if let Some(event) = convert(_type, &cg_event_ref, keyboard) {
                 if let Some(callback) = &mut GLOBAL_CALLBACK {
                     if callback(event).is_none() {
-                        cg_event.set_type(CGEventType::Null);
+                        cg_event_ref.set_type(CGEventType::Null);
                     }
                 }
             }
