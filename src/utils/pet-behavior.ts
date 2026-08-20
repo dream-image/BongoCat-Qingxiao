@@ -123,6 +123,8 @@ export interface PetBehaviorClock {
 export interface PetBehaviorRuntimeContext {
   enabled: boolean
   visible: boolean
+  rendererReady: boolean
+  renderedVisible: boolean
   inputStatus: PetInputStatus
   mouseInteractions: boolean
   activationDelayMs?: number
@@ -167,6 +169,8 @@ const defaultClock: PetBehaviorClock = {
 const defaultContext: PetBehaviorRuntimeContext = {
   enabled: true,
   visible: true,
+  rendererReady: false,
+  renderedVisible: false,
   inputStatus: 'unavailable',
   mouseInteractions: true,
 }
@@ -258,7 +262,10 @@ export class PetBehaviorController {
     this.exitingPromise = null
 
     if (shouldRestore) {
-      if (!this.context.visible && this.defaultAnimation) {
+      if ((!this.context.visible
+        || !this.context.rendererReady
+        || !this.context.renderedVisible)
+      && this.defaultAnimation) {
         this.driver.play(this.defaultAnimation, { returnTo: this.defaultAnimation })
       } else {
         this.driver.play(shouldRestore.exitAnimation, {
@@ -294,6 +301,10 @@ export class PetBehaviorController {
 
     if (patch.enabled !== void 0) this.context.enabled = patch.enabled
     if (patch.visible !== void 0) this.context.visible = patch.visible
+    if (patch.rendererReady !== void 0) this.context.rendererReady = patch.rendererReady
+    if (patch.renderedVisible !== void 0) {
+      this.context.renderedVisible = patch.renderedVisible
+    }
     if (patch.inputStatus !== void 0) {
       this.context.inputStatus = patch.inputStatus
 
@@ -315,7 +326,10 @@ export class PetBehaviorController {
       this.exitingPromise = null
 
       if (wasInPetMode && this.behaviorConfig) {
-        if (!this.context.visible && this.defaultAnimation) {
+        if ((!this.context.visible
+          || !this.context.rendererReady
+          || !this.context.renderedVisible)
+        && this.defaultAnimation) {
           this.driver.play(this.defaultAnimation, { returnTo: this.defaultAnimation })
         } else {
           this.driver.play(this.behaviorConfig.exitAnimation, {
@@ -537,6 +551,8 @@ export class PetBehaviorController {
       && this.started
       && this.context.enabled
       && this.context.visible
+      && this.context.rendererReady
+      && this.context.renderedVisible
       && this.context.inputStatus === 'ready',
     )
   }

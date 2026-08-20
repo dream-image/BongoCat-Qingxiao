@@ -70,6 +70,7 @@ export function useModel() {
     const generation = ++loadGeneration
     const currentModel = modelStore.currentModel
 
+    modelRuntime.updatePetRuntimeContext({ rendererReady: false })
     modelSize.value = void 0
     modelStore.currentMotions = []
     modelStore.currentExpressions = []
@@ -144,6 +145,7 @@ export function useModel() {
 
   function handleDestroy() {
     ++loadGeneration
+    modelRuntime.updatePetRuntimeContext({ rendererReady: false })
     modelRuntime.destroy()
   }
 

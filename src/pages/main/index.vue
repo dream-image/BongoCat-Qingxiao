@@ -44,6 +44,7 @@ const resizing = ref(false)
 const backgroundImagePath = ref<string>()
 const { stickActive } = useGamepad()
 let modelLoadGeneration = 0
+let resizeGeneration = 0
 
 onMounted(startListening)
 
@@ -53,23 +54,35 @@ onUnmounted(() => {
   handleDestroy()
 })
 
-const debouncedResize = useDebounceFn(async () => {
-  await handleResize()
+const debouncedResize = useDebounceFn(async (generation: number, loadGeneration: number) => {
+  const resized = await handleResize()
+
+  if (generation !== resizeGeneration || loadGeneration !== modelLoadGeneration) return
 
   resizing.value = false
+
+  if (resized && modelStore.modelReady) {
+    modelRuntime.updatePetRuntimeContext({ rendererReady: true })
+  }
 }, 100)
 
 useEventListener('resize', () => {
-  resizing.value = true
+  const generation = ++resizeGeneration
 
-  debouncedResize()
+  resizing.value = true
+  modelRuntime.updatePetRuntimeContext({ rendererReady: false })
+
+  debouncedResize(generation, modelLoadGeneration)
 })
 
 watch(() => modelStore.currentModel, async (model) => {
   const generation = ++modelLoadGeneration
 
+  ++resizeGeneration
+  resizing.value = false
   petPointer.reset()
   modelStore.modelReady = false
+  modelRuntime.updatePetRuntimeContext({ rendererReady: false })
   backgroundImagePath.value = void 0
   clearObject([modelStore.supportKeys, modelStore.pressedKeys])
 
@@ -120,6 +133,10 @@ watch(() => modelStore.currentModel, async (model) => {
   clearObject([modelStore.supportKeys])
   Object.assign(modelStore.supportKeys, nextSupportKeys)
   modelStore.modelReady = true
+
+  if (!resizing.value) {
+    modelRuntime.updatePetRuntimeContext({ rendererReady: true })
+  }
 }, { deep: true, immediate: true })
 
 watch([() => catStore.window.scale, modelSize], async ([scale, modelSize]) => {
@@ -170,10 +187,6 @@ watch([
     visible,
     mouseInteractions: interactionEnabled,
   })
-}, { immediate: true })
-
-watch(() => catStore.window.passThrough, (value) => {
-  appWindow.setIgnoreCursorEvents(value)
 }, { immediate: true })
 
 watch(() => catStore.window.alwaysOnTop, setAlwaysOnTop, { immediate: true })

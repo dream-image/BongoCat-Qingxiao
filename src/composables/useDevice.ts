@@ -53,6 +53,8 @@ const DEVICE_RETRY_BASE_DELAY = 500
 const DEVICE_RETRY_MAX_DELAY = 8000
 const DEVICE_RETRY_MAX_ATTEMPTS = 6
 const DEVICE_READY_STABILITY_DELAY = 10000
+const WINDOW_VISIBILITY_POLL_DELAY = 50
+const WINDOW_VISIBILITY_POLL_ATTEMPTS = 40
 const appWindow = getCurrentWebviewWindow()
 
 export function useDevice() {
@@ -77,6 +79,14 @@ export function useDevice() {
   let listenerStart: Promise<void> | undefined
   let permissionFlow: Promise<boolean> | undefined
   let permissionPromptRequested = false
+  let hideOnHoverTimer: ReturnType<typeof setTimeout> | undefined
+  let pointerInsideMainWindow = false
+  let hoverHidden = false
+  let actualWindowVisible = false
+  let windowVisibilityGeneration = 0
+  let unlistenWindowClose = () => {}
+  let desiredIgnoreCursorEvents = false
+  let ignoreCursorEventsTask: Promise<void> | undefined
 
   const clearRetryTimer = () => {
     if (!retryTimer) return
@@ -149,6 +159,18 @@ export function useDevice() {
   }
 
   onMounted(async () => {
+    void reconcileWindowVisibility()
+
+    const nextUnlistenWindowClose = await appWindow.onCloseRequested(() => {
+      void reconcileWindowVisibility(false)
+    })
+
+    if (unmounted) {
+      nextUnlistenWindowClose()
+    } else {
+      unlistenWindowClose = nextUnlistenWindowClose
+    }
+
     scaleFactor.value = isMac ? await appWindow.scaleFactor() : 1
 
     appWindow.onScaleChanged(({ payload }) => {
@@ -161,11 +183,17 @@ export function useDevice() {
   onUnmounted(() => {
     unmounted = true
     ++lifecycleGeneration
+    ++windowVisibilityGeneration
+    unlistenWindowClose()
     clearRetryTimer()
     clearReadyResetTimer()
     clearPermissionPollTimer()
+    resetHideOnHover()
     releaseInputState()
-    modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+    modelRuntime.updatePetRuntimeContext({
+      inputStatus: 'unavailable',
+      renderedVisible: false,
+    })
     Ticker.shared.remove(tickerCallback)
   })
 
@@ -252,41 +280,181 @@ export function useDevice() {
     return nextKey
   }
 
-  const onHideOnHover = (() => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let wasInWindow = false
+  const clearHideOnHoverTimer = () => {
+    if (!hideOnHoverTimer) return
 
-    return (x: number, y: number) => {
-      const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
+    clearTimeout(hideOnHoverTimer)
+    hideOnHoverTimer = void 0
+  }
 
-      if (isNil(winX) || isNil(winY) || isNil(width) || isNil(height)) return
+  const syncRenderedVisibility = () => {
+    modelRuntime.updatePetRuntimeContext({
+      renderedVisible: !unmounted
+        && catStore.window.visible
+        && actualWindowVisible
+        && !hoverHidden,
+    })
+  }
 
-      const isInWindow = inBetween(x, winX, winX + width)
-        && inBetween(y, winY, winY + height)
+  const syncIgnoreCursorEvents = () => {
+    desiredIgnoreCursorEvents = hoverHidden || catStore.window.passThrough
 
-      if (isInWindow === wasInWindow) return
+    if (ignoreCursorEventsTask) return
 
-      if (timer) {
-        clearTimeout(timer)
+    const nextTask = (async () => {
+      for (;;) {
+        const desired = desiredIgnoreCursorEvents
 
-        timer = void 0
+        try {
+          await appWindow.setIgnoreCursorEvents(desired)
+        } catch (reason) {
+          console.error('Failed to update cursor event policy:', reason)
+        }
+
+        if (desired === desiredIgnoreCursorEvents) return
       }
+    })()
 
-      if (isInWindow) {
-        timer = setTimeout(() => {
-          document.body.style.setProperty('opacity', '0')
+    ignoreCursorEventsTask = nextTask
 
-          appWindow.setIgnoreCursorEvents(true)
-        }, catStore.window.hideOnHoverDelay * 1000)
-      } else {
-        document.body.style.setProperty('opacity', 'unset')
+    void nextTask.finally(() => {
+      if (ignoreCursorEventsTask === nextTask) ignoreCursorEventsTask = void 0
+    })
+  }
 
-        appWindow.setIgnoreCursorEvents(catStore.window.passThrough)
-      }
+  const setActualWindowVisible = (visible: boolean) => {
+    actualWindowVisible = visible
+    syncRenderedVisibility()
+  }
 
-      wasInWindow = isInWindow
+  const reconcileWindowVisibility = async (expected?: boolean) => {
+    const generation = ++windowVisibilityGeneration
+
+    if (expected === false) {
+      setActualWindowVisible(false)
+
+      return
     }
-  })()
+
+    for (let attempt = 0; attempt < WINDOW_VISIBILITY_POLL_ATTEMPTS; attempt++) {
+      if (unmounted || generation !== windowVisibilityGeneration) return
+
+      let visible: boolean
+
+      try {
+        visible = await appWindow.isVisible()
+      } catch (reason) {
+        console.error('Failed to read window visibility:', reason)
+
+        return
+      }
+
+      if (unmounted || generation !== windowVisibilityGeneration) return
+
+      if (expected !== true || visible) {
+        setActualWindowVisible(visible)
+
+        return
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, WINDOW_VISIBILITY_POLL_DELAY)
+      })
+    }
+
+    if (!unmounted && generation === windowVisibilityGeneration) {
+      setActualWindowVisible(false)
+    }
+  }
+
+  const setHoverHidden = (hidden: boolean) => {
+    hoverHidden = hidden
+
+    if (hidden) {
+      document.body.style.setProperty('opacity', '0')
+    } else {
+      document.body.style.removeProperty('opacity')
+    }
+
+    syncRenderedVisibility()
+    syncIgnoreCursorEvents()
+  }
+
+  const resetHideOnHover = () => {
+    clearHideOnHoverTimer()
+    pointerInsideMainWindow = false
+    setHoverHidden(false)
+  }
+
+  const onHideOnHover = (x: number, y: number) => {
+    const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
+
+    if (isNil(winX) || isNil(winY) || isNil(width) || isNil(height)) return
+
+    const isInWindow = inBetween(x, winX, winX + width)
+      && inBetween(y, winY, winY + height)
+
+    if (isInWindow === pointerInsideMainWindow) return
+
+    pointerInsideMainWindow = isInWindow
+    clearHideOnHoverTimer()
+
+    if (!isInWindow) {
+      setHoverHidden(false)
+
+      return
+    }
+
+    hideOnHoverTimer = setTimeout(() => {
+      hideOnHoverTimer = void 0
+
+      if (unmounted
+        || !catStore.window.visible
+        || !catStore.window.hideOnHover
+        || !pointerInsideMainWindow) {
+        return
+      }
+
+      setHoverHidden(true)
+    }, catStore.window.hideOnHoverDelay * 1000)
+  }
+
+  watch([
+    () => catStore.window.hideOnHover,
+    () => catStore.window.visible,
+  ], ([hideOnHover, visible]) => {
+    if (!visible) {
+      void reconcileWindowVisibility(false)
+      resetHideOnHover()
+
+      return
+    }
+
+    void reconcileWindowVisibility(true)
+
+    if (!hideOnHover) {
+      resetHideOnHover()
+
+      return
+    }
+
+    syncRenderedVisibility()
+    syncIgnoreCursorEvents()
+  }, { immediate: true })
+
+  watch(() => catStore.window.passThrough, syncIgnoreCursorEvents, { immediate: true })
+
+  useTauriListen<string>(LISTEN_KEY.SHOW_WINDOW, ({ payload }) => {
+    if (payload !== WINDOW_LABEL.MAIN) return
+
+    void reconcileWindowVisibility(true)
+  })
+
+  useTauriListen<string>(LISTEN_KEY.HIDE_WINDOW, ({ payload }) => {
+    if (payload !== WINDOW_LABEL.MAIN) return
+
+    void reconcileWindowVisibility(false)
+  })
 
   const handleCursorMove = async (cursorPoint: CursorPoint) => {
     const x = cursorPoint.x * scaleFactor.value

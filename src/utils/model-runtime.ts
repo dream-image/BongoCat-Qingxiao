@@ -158,6 +158,8 @@ class ModelRuntime {
 
     if (context.enabled === false
       || context.visible === false
+      || context.rendererReady === false
+      || context.renderedVisible === false
       || context.inputStatus === 'unavailable') {
       this.petExitGeneration++
       this.pendingSpriteBinding = void 0
@@ -205,6 +207,7 @@ class ModelRuntime {
   }
 
   private destroyRenderers() {
+    this.petBehavior.updateContext({ rendererReady: false })
     this.petBehavior.stop()
     this.petBehavior.configure()
     this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs)
