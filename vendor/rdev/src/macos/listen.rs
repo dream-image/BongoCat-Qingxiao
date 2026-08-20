@@ -208,6 +208,9 @@ unsafe fn cleanup_setup_listener(
     let tap_address = tap as usize;
     let source_address = source as usize;
     let cleanup = move || unsafe {
+        let _callback_guard = CALLBACK_GATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let tap = tap_address as CFMachPortRef;
         let source = source_address as CFRunLoopSourceRef;
         if !tap.is_null() {
@@ -365,8 +368,8 @@ where
             {
                 return Err(ListenError::CallbackPanic);
             }
+            resources.disarm();
         }
-        resources.disarm();
         CFRunLoopRun();
     }
     Ok(())
