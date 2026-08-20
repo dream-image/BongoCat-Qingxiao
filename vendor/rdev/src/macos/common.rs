@@ -41,6 +41,15 @@ pub const kKeyboardISO: PhysicalKeyboardLayoutType = 1230196512;
 #[allow(non_upper_case_globals, dead_code)]
 pub const kKeyboardUnknown: PhysicalKeyboardLayoutType = 1061109567;
 
+const DEVICE_LEFT_CONTROL_FLAG: u64 = 0x00000001;
+const DEVICE_LEFT_SHIFT_FLAG: u64 = 0x00000002;
+const DEVICE_RIGHT_SHIFT_FLAG: u64 = 0x00000004;
+const DEVICE_LEFT_META_FLAG: u64 = 0x00000008;
+const DEVICE_RIGHT_META_FLAG: u64 = 0x00000010;
+const DEVICE_LEFT_ALT_FLAG: u64 = 0x00000020;
+const DEVICE_RIGHT_ALT_FLAG: u64 = 0x00000040;
+const DEVICE_RIGHT_CONTROL_FLAG: u64 = 0x00002000;
+
 // https://developer.apple.com/documentation/coregraphics/cgeventtapplacement?language=objc
 pub type CGEventTapPlacement = u32;
 #[allow(non_upper_case_globals)]
@@ -54,7 +63,6 @@ pub enum CGEventTapOption {
     ListenOnly = 1,
 }
 
-pub static mut LAST_FLAGS: CGEventFlags = CGEventFlags::CGEventFlagNull;
 lazy_static! {
     pub static ref KEYBOARD_STATE: Mutex<Option<Keyboard>> = Mutex::new(Keyboard::new());
 }
@@ -173,6 +181,23 @@ unsafe fn get_code(cg_event: &CGEvent) -> Option<CGKeyCode> {
         .ok()
 }
 
+#[allow(non_upper_case_globals)]
+fn modifier_flag_for_code(code: CGKeyCode) -> Option<u64> {
+    match code {
+        kVK_Control => Some(DEVICE_LEFT_CONTROL_FLAG),
+        kVK_Shift => Some(DEVICE_LEFT_SHIFT_FLAG),
+        kVK_RightShift => Some(DEVICE_RIGHT_SHIFT_FLAG),
+        kVK_Command => Some(DEVICE_LEFT_META_FLAG),
+        kVK_RightCommand => Some(DEVICE_RIGHT_META_FLAG),
+        kVK_Option => Some(DEVICE_LEFT_ALT_FLAG),
+        kVK_RightOption => Some(DEVICE_RIGHT_ALT_FLAG),
+        kVK_RightControl => Some(DEVICE_RIGHT_CONTROL_FLAG),
+        kVK_CapsLock => Some(CGEventFlags::CGEventFlagAlphaShift.bits()),
+        kVK_Function => Some(CGEventFlags::CGEventFlagSecondaryFn.bits()),
+        _ => None,
+    }
+}
+
 pub unsafe fn convert(
     _type: CGEventType,
     cg_event: &CGEvent,
@@ -215,14 +240,17 @@ pub unsafe fn convert(
         }
         CGEventType::FlagsChanged => {
             code = get_code(cg_event)?;
-            let flags = cg_event.get_flags();
-            if flags < LAST_FLAGS {
-                LAST_FLAGS = flags;
-                Some(EventType::KeyRelease(key_from_code(code)))
+            let pressed = modifier_flag_for_code(code)
+                .map(|flag| cg_event.get_flags().bits() & flag != 0)
+                .unwrap_or_else(|| {
+                    CGEventSourceKeyState(CGEventSourceStateID::CombinedSessionState, code)
+                });
+            let key = key_from_code(code);
+            Some(if pressed {
+                EventType::KeyPress(key)
             } else {
-                LAST_FLAGS = flags;
-                Some(EventType::KeyPress(key_from_code(code)))
-            }
+                EventType::KeyRelease(key)
+            })
         }
         CGEventType::ScrollWheel => {
             let delta_y =
