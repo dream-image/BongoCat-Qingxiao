@@ -1,3 +1,8 @@
+//! BongoCat 内置的 rdev fork。
+//!
+//! 本地维护边界是全局监听的“真正就绪”和运行时失效通知、跨 FFI panic 隔离，以及
+//! macOS Event Tap 的 ABI/资源所有权修复。其余代码尽量保持上游结构，便于以后同步。
+//!
 //! Simple library to listen and send events to keyboard and mouse on MacOS, Windows and Linux
 //! (x11).
 //!
@@ -311,6 +316,8 @@ pub use crate::rdev::UnicodeInfo;
 ///     }
 /// }
 /// ```
+///
+/// BongoCat 的 macOS 监听可能通过系统回调和主队列完成失败清理，因此事件闭包必须可安全跨线程转移。
 #[cfg(target_os = "macos")]
 pub fn listen<T>(callback: T) -> Result<(), ListenError>
 where
@@ -331,6 +338,7 @@ where
 }
 
 #[cfg(target_os = "macos")]
+/// 只有底层系统 Hook 已经能接收事件时才调用 `ready`，避免应用把“开始安装”误认为可用。
 pub fn listen_with_ready<T, R>(callback: T, ready: R) -> Result<(), ListenError>
 where
     T: FnMut(Event) + Send + 'static,
@@ -343,6 +351,7 @@ where
     not(target_os = "macos"),
     not(any(target_os = "android", target_os = "ios"))
 ))]
+/// 只有底层系统 Hook 已经能接收事件时才调用 `ready`，避免应用把“开始安装”误认为可用。
 pub fn listen_with_ready<T, R>(callback: T, ready: R) -> Result<(), ListenError>
 where
     T: FnMut(Event) + 'static,
@@ -352,6 +361,8 @@ where
 }
 
 #[cfg(target_os = "macos")]
+/// 在 Event Tap 失效或无法重新启用时主动通知调用方，使应用能够释放旧状态并重试。
+/// macOS 的失败回调可能由系统回调/主队列执行，因此必须满足 `Send`。
 pub fn listen_with_ready_and_error<T, R, F>(
     callback: T,
     ready: R,

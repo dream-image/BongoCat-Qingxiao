@@ -43,6 +43,7 @@ const generalStore = useGeneralStore()
 const resizing = ref(false)
 const backgroundImagePath = ref<string>()
 const { stickActive } = useGamepad()
+// 模型加载和窗口重绘各自判代次，旧异步结果不能重新打开 rendererReady 门禁。
 let modelLoadGeneration = 0
 let resizeGeneration = 0
 
@@ -57,6 +58,7 @@ onUnmounted(() => {
 const debouncedResize = useDebounceFn(async (generation: number, loadGeneration: number) => {
   const resized = await handleResize()
 
+  // debounce 执行期间可能已切模型或开始下一次 resize，旧任务不得提交 ready。
   if (generation !== resizeGeneration || loadGeneration !== modelLoadGeneration) return
 
   resizing.value = false
@@ -70,6 +72,7 @@ useEventListener('resize', () => {
   const generation = ++resizeGeneration
 
   resizing.value = true
+  // resize 完成前暂停自主行为，避免动作落到尺寸尚未同步的画布。
   modelRuntime.updatePetRuntimeContext({ rendererReady: false })
 
   debouncedResize(generation, modelLoadGeneration)
@@ -80,6 +83,7 @@ watch(() => modelStore.currentModel, async (model) => {
 
   ++resizeGeneration
   resizing.value = false
+  // 先保留物理按压并撤掉旧视觉映射，待新模型资源表完成后再映射回来。
   prepareModelTransition()
   petPointer.reset()
   modelStore.modelReady = false
@@ -94,6 +98,7 @@ watch(() => modelStore.currentModel, async (model) => {
   }
 
   const { id, path: modelPath, renderer } = model
+  // 深度 watch 可能在同一模型对象上触发，身份字段与代次一起核验才可靠。
   const isCurrent = () => {
     const current = modelStore.currentModel
 
@@ -133,9 +138,11 @@ watch(() => modelStore.currentModel, async (model) => {
   backgroundImagePath.value = nextBackgroundImagePath
   clearObject([modelStore.supportKeys])
   Object.assign(modelStore.supportKeys, nextSupportKeys)
+  // supportKeys 完整提交后才能重映射持续按住的键，否则会错误回退或丢贴图。
   remapPressedKeyboardInputs()
   modelStore.modelReady = true
 
+  // rendererReady 比 modelReady 更严格：窗口重绘期间仍保持关闭。
   if (!resizing.value) {
     modelRuntime.updatePetRuntimeContext({ rendererReady: true })
   }
@@ -179,6 +186,7 @@ watch([
   () => catStore.window.passThrough,
   () => catStore.window.hideOnHover,
 ], ([enabled, activationDelayMs, mouseInteractions, visible, ignoreMouse, passThrough, hideOnHover]) => {
+  // 穿透或 hover 隐藏时无法可靠接收指针序列，因此同时关闭并重置宠物鼠标交互。
   const interactionEnabled = mouseInteractions && !ignoreMouse && !passThrough && !hideOnHover
 
   if (!enabled || !visible || !interactionEnabled) petPointer.reset()
@@ -210,12 +218,14 @@ useTauriListen<number>(LISTEN_KEY.SET_EXPRESSION, ({ payload }) => {
 })
 
 function handleMouseDown(event: MouseEvent) {
+  // 宠物手势已捕获左键时不能再触发窗口拖拽，两套状态机必须互斥。
   if (event.button !== 0 || petPointer.isCapturing()) return
 
   appWindow.startDragging()
 }
 
 function handlePointerDown(event: PointerEvent) {
+  // 仅在命中模型交互区域后阻止默认行为，空白区域仍保留原窗口操作。
   if (!petPointer.handlePointerDown(event)) return
 
   event.preventDefault()

@@ -48,9 +48,11 @@ export function useGamepad() {
     right: sticks.right.moved || sticks.right.pressed,
   }))
 
+  // 输入 ID 带来源命名空间，避免手柄按钮名与键盘键名互相覆盖释放状态。
   const getInputId = (name: string) => `Gamepad:${name}`
 
   const releaseGamepadState = () => {
+    // 停止监听时系统不会补发 release，必须主动清空 runtime 与模型参数，防止“卡键”。
     for (const name of pressedButtons) {
       handleRelease(name, true, getInputId(name))
     }
@@ -76,12 +78,14 @@ export function useGamepad() {
 
     if (!gamepadModeActive) releaseGamepadState()
 
+    // invoke 失败不应打断 Vue watcher；后续模式变化仍可再次尝试同步原生监听状态。
     void invoke(gamepadModeActive
       ? INVOKE_KEY.START_GAMEPAD_LISTING
       : INVOKE_KEY.STOP_GAMEPAD_LISTING).catch(() => void 0)
   }, { immediate: true })
 
   onUnmounted(() => {
+    // 组件卸载与模式切换采用相同收尾规则，保证原生监听和前端按压状态一起结束。
     gamepadModeActive = false
     releaseGamepadState()
     void invoke(INVOKE_KEY.STOP_GAMEPAD_LISTING).catch(() => void 0)
@@ -90,6 +94,7 @@ export function useGamepad() {
   watch(() => modelStore.modelReady, (ready) => {
     if (!ready || !gamepadModeActive) return
 
+    // 模型切换会重建渲染器；重放仍有效的摇杆状态，而不是等待下一次硬件事件。
     void handleAxisChange('CatParamStickLX', sticks.left.x)
     void handleAxisChange('CatParamStickLY', sticks.left.y)
     void handleAxisChange('CatParamStickRX', sticks.right.x)
@@ -119,6 +124,7 @@ export function useGamepad() {
   }, { deep: true })
 
   useTauriListen<GamepadEvent>(LISTEN_KEY.GAMEPAD_CHANGED, ({ payload }) => {
+    // stop invoke 与事件投递存在时间差，离开手柄模式后的迟到事件必须丢弃。
     if (!gamepadModeActive) return
 
     const { name, value } = payload
@@ -152,6 +158,7 @@ export function useGamepad() {
   const handleButtonChange = (name: string, pressed: boolean) => {
     const wasPressed = pressedButtons.has(name)
 
+    // 部分驱动会连续上报相同值，去重后才不会重复生成气泡或重置行为计时。
     if (pressed === wasPressed) return
 
     if (pressed) {
@@ -182,6 +189,7 @@ export function useGamepad() {
       sticks.right.pressed = pressed
     }
 
+    // 摇杆按下也属于活跃输入，必须阻止用户操作期间进入自主宠物形态。
     modelRuntime.setKeyboardInputActive(getInputId(name), pressed)
     modelRuntime.setParameterValue(
       isLeft ? 'CatParamStickLeftDown' : 'CatParamStickRightDown',

@@ -11,11 +11,17 @@ use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Mutex;
 
+// 系统回调与失败清理不保证停留在创建线程，所以被长期保存的闭包显式要求 Send。
 static mut GLOBAL_CALLBACK: Option<Box<dyn FnMut(Event) + Send>> = None;
 static mut GLOBAL_FAILURE_CALLBACK: Option<Box<dyn FnOnce(ListenError) + Send>> = None;
 static mut EVENT_TAP: CFMachPortRef = null();
 static mut EVENT_SOURCE: CFRunLoopSourceRef = null_mut();
+// CoreGraphics 回调、安装失败清理和主队列异步释放都可能触碰同一组全局指针。
+// 统一门禁让“回调仍在使用”和“资源开始释放”形成明确的先后关系，避免 use-after-free。
 static CALLBACK_GATE: Mutex<()> = Mutex::new(());
+
+// 安装与运行时失败的资源所有者不同：INSTALLING 仍由栈上 RAII 对象持有，COMMITTED
+// 已转交给全局监听器；分开记录才能保证每个 CF 对象只释放一次。
 const LISTENER_INACTIVE: u8 = 0;
 const LISTENER_INSTALLING: u8 = 1;
 const LISTENER_COMMITTED: u8 = 2;
@@ -45,6 +51,7 @@ impl ListenerResources {
     }
 
     fn disarm(&mut self) {
+        // 只在全局状态成功接管资源后解除 RAII，后续提前返回仍由 Drop 完整回滚。
         self.tap = null();
         self.source = null_mut();
         self.source_added = false;
@@ -60,6 +67,7 @@ impl Drop for ListenerResources {
 
         unsafe {
             if LISTENER_PHASE.load(Ordering::Acquire) == LISTENER_CALLBACK_FAILED {
+                // 运行时失败路径已经把释放工作投递到主队列；这里只交还栈上所有权，防止双重释放。
                 let _callback_guard = CALLBACK_GATE
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -83,6 +91,7 @@ unsafe extern "C" fn raw_callback(
     cg_event: CGEventRef,
     _user_info: *mut c_void,
 ) -> CGEventRef {
+    // Rust panic 绝不能越过 C ABI；即使业务回调异常，也必须原样返回系统拥有的事件指针。
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let _callback_guard = CALLBACK_GATE
             .lock()
@@ -91,6 +100,7 @@ unsafe extern "C" fn raw_callback(
             _type,
             CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput
         ) {
+            // macOS 会因回调超时或用户输入暂时禁用 tap，收到系统事件后尝试自愈并验证结果。
             handle_disabled_event_tap();
             return;
         }
@@ -110,6 +120,7 @@ unsafe extern "C" fn raw_callback(
 }
 
 unsafe extern "C" fn raw_invalidation_callback(tap: CFMachPortRef, _info: *mut c_void) {
+    // invalidation 可能与安装提交同时发生，必须走同一门禁和状态机，不能直接释放全局指针。
     let _ = catch_unwind(AssertUnwindSafe(|| {
         let _callback_guard = CALLBACK_GATE
             .lock()
@@ -151,10 +162,12 @@ unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event:
 }
 
 fn listener_accepts_events() -> bool {
+    // ready 回调执行完且资源所有权提交之前不派发事件，避免前端收到事件时仍认为监听器未就绪。
     LISTENER_PHASE.load(Ordering::Acquire) == LISTENER_COMMITTED
 }
 
 unsafe fn stop_listener_after_runtime_failure(error: ListenError) {
+    // 多个系统回调可能同时观察到失败；CAS 只允许一个调用者成为清理者并通知应用。
     let previous_phase = loop {
         let phase = LISTENER_PHASE.load(Ordering::Acquire);
         if !matches!(phase, LISTENER_INSTALLING | LISTENER_COMMITTED) {
@@ -177,6 +190,7 @@ unsafe fn stop_listener_after_runtime_failure(error: ListenError) {
     let source = EVENT_SOURCE;
 
     if previous_phase == LISTENER_INSTALLING {
+        // 安装阶段仍由 ListenerResources::drop 回滚；这里只撤掉失效回调，避免两条路径抢着释放。
         if !tap.is_null() {
             CFMachPortSetInvalidationCallBack(tap, None);
         }
@@ -205,6 +219,8 @@ unsafe fn cleanup_setup_listener(
     source: CFRunLoopSourceRef,
     source_added: bool,
 ) {
+    // dispatch crate 要求闭包可跨线程发送，而裸 CF 指针不是 Send；转为地址只用于传递，
+    // 进入拥有 RunLoop 的主队列后立即还原，并仍在 CALLBACK_GATE 下访问。
     let tap_address = tap as usize;
     let source_address = source as usize;
     let cleanup = move || unsafe {
@@ -237,6 +253,7 @@ unsafe fn cleanup_setup_listener(
         }
     };
 
+    // 已加入主 RunLoop 的 source 必须在主线程移除；若尚未加入或本就在主线程则直接清理。
     if source_added && pthread_main_np() == 0 {
         Queue::main().exec_sync(cleanup);
     } else {
@@ -250,6 +267,8 @@ unsafe fn release_listener_resources_async(
     failure_callback: Option<Box<dyn FnOnce(ListenError) + Send>>,
     error: ListenError,
 ) {
+    // 失效通知发生在 CoreGraphics 回调栈内，不能当场 CFRelease 正在回调的 tap。
+    // 延迟到主队列释放后再通知上层，保证上层重启时旧实例已完全退出。
     let tap_address = tap as usize;
     let source_address = source as usize;
     Queue::main().exec_async(move || unsafe {
@@ -335,6 +354,7 @@ where
         EVENT_SOURCE = source;
 
         LISTENER_PHASE.store(LISTENER_INSTALLING, Ordering::Release);
+        // 安装 invalidation 回调后还必须在门禁内复查 phase，因为系统可能同步宣告 tap 已失效。
         CFMachPortSetInvalidationCallBack(tap, Some(raw_invalidation_callback));
         {
             let _callback_guard = CALLBACK_GATE
@@ -368,6 +388,8 @@ where
             {
                 return Err(ListenError::CallbackPanic);
             }
+            // 所有权转移必须和 COMMITTED 写入处于同一临界区；否则失效回调可能先安排释放，
+            // 栈上 Drop 又释放一次同一资源。
             resources.disarm();
         }
         CFRunLoopRun();

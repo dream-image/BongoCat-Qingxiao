@@ -12,6 +12,7 @@ export interface CatStore {
     ignoreMouse: boolean
   }
   pet: {
+    // 宠物配置独立于模型渲染配置，后续新增行为策略时无需污染 model 字段。
     enabled: boolean
     activationDelayMs?: number
     mouseInteractions: boolean
@@ -63,6 +64,7 @@ export const useCatStore = defineStore('cat', () => {
     ignoreMouse: false,
   })
 
+  // 当前先保存通用运行开关；具体行为由模型能力声明决定，不在 store 中硬编码动作。
   const pet = reactive<CatStore['pet']>({
     enabled: true,
     activationDelayMs: void 0,

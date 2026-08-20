@@ -1,3 +1,5 @@
+# BongoCat 本地维护的 rdev fork。维护范围仅限全局监听的就绪/失败生命周期、
+# FFI 回调安全及资源释放；同步上游时不要覆盖这些项目专用修复。
 [package]
 authors = ["Nicolas Patry <patry.nicolas@protonmail.com>"]
 edition = "2018"

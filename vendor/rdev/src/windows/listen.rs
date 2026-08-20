@@ -21,6 +21,7 @@ use winapi::{
 static mut GLOBAL_CALLBACK: Option<Box<dyn FnMut(Event)>> = None;
 static CALLBACK_PANICKED: AtomicBool = AtomicBool::new(false);
 
+// 键盘 Hook 成功、鼠标 Hook 失败等“部分安装”也必须回滚；RAII 同时覆盖 panic 和消息循环退出。
 struct ListenerResources;
 
 impl Drop for ListenerResources {
@@ -75,6 +76,7 @@ unsafe fn raw_callback(
 }
 
 unsafe extern "system" fn raw_callback_mouse(code: i32, param: usize, lpdata: isize) -> isize {
+    // Windows Hook 是 C ABI 回调，捕获 panic 后仍调用下一个 Hook，不能破坏系统输入链。
     match catch_unwind(AssertUnwindSafe(|| {
         raw_callback(code, param, lpdata, |data: isize| unsafe {
             (*(data as PMOUSEHOOKSTRUCT)).dwExtraInfo
@@ -91,6 +93,7 @@ unsafe extern "system" fn raw_callback_mouse(code: i32, param: usize, lpdata: is
 }
 
 unsafe extern "system" fn raw_callback_keyboard(code: i32, param: usize, lpdata: isize) -> isize {
+    // 键盘与鼠标入口分别隔离 panic，保证任一业务异常都不会展开到 user32.dll。
     match catch_unwind(AssertUnwindSafe(|| {
         raw_callback(code, param, lpdata, |data: isize| unsafe {
             (*(data as PKBDLLHOOKSTRUCT)).dwExtraInfo
@@ -109,6 +112,7 @@ unsafe extern "system" fn raw_callback_keyboard(code: i32, param: usize, lpdata:
 unsafe fn signal_callback_panic() {
     CALLBACK_PANICKED.store(true, Ordering::Release);
     GLOBAL_CALLBACK = None;
+    // 消息循环本身是阻塞的；投递 Quit 才能让 listen 返回 CallbackPanic 并触发 RAII 卸载 Hook。
     PostQuitMessage(1);
 }
 
@@ -133,11 +137,14 @@ where
             set_mouse_hook(raw_callback_mouse)?;
         }
 
+        // 只有两个所需 Hook 都安装完成才通知 Ready，避免前端过早认为输入权限已经可用。
         if catch_unwind(AssertUnwindSafe(ready)).is_err() {
             return Err(ListenError::CallbackPanic);
         }
 
         let mut message: MSG = zeroed();
+        // 低层 Hook 依赖安装线程持续 pump 消息：>0 分发事件，0 表示正常退出或回调 panic
+        // 主动 PostQuitMessage，-1 才是 GetMessage 本身失败，三种结果不能合并处理。
         loop {
             let result = GetMessageA(&mut message, null_mut(), 0, 0);
             if result > 0 {

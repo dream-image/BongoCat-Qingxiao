@@ -19,6 +19,8 @@ static mut CALLBACK_CONTROL_DISPLAY: *mut xlib::Display = null_mut();
 static mut CALLBACK_CONTEXT: c_ulong = 0;
 static CALLBACK_PANICKED: AtomicBool = AtomicBool::new(false);
 
+// XRecord 初始化包含多次分配，任一步骤都可能失败；用 RAII 统一回收已成功的部分，
+// 同时保证监听循环退出后不会遗留 Display、Context 或全局回调供下一次重试误用。
 struct ListenerResources {
     control_display: *mut xlib::Display,
     data_display: *mut xlib::Display,
@@ -66,6 +68,7 @@ struct InterceptData(*mut xrecord::XRecordInterceptData);
 
 impl Drop for InterceptData {
     fn drop(&mut self) {
+        // XRecord 每次回调都转移一块数据给调用方，即使提前返回或业务回调 panic 也必须释放。
         unsafe {
             xrecord::XRecordFreeData(self.0);
         }
@@ -92,6 +95,8 @@ where
         GLOBAL_CALLBACK = Some(Box::new(callback));
         GLOBAL_READY_CALLBACK = Some(Box::new(ready));
         let mut resources = ListenerResources::new();
+        // XRecordEnableContext 会阻塞 data 连接；回调若要通过 XRecordDisableContext 唤醒它，
+        // 必须保留另一条独立 control 连接，否则同一 Display 上的控制请求无法被处理。
         // Open displays
         let control_display = xlib::XOpenDisplay(null());
         if control_display.is_null() {
@@ -180,6 +185,7 @@ unsafe extern "C" fn record_callback(
     _null: *mut c_char,
     raw_data: *mut xrecord::XRecordInterceptData,
 ) {
+    // Xlib 通过 C ABI 调用这里，Rust panic 不能穿过该边界；异常转为可恢复的监听错误。
     if catch_unwind(AssertUnwindSafe(|| handle_record_callback(raw_data))).is_err() {
         let _ = catch_unwind(AssertUnwindSafe(|| {
             signal_callback_panic();
@@ -194,6 +200,7 @@ unsafe fn handle_record_callback(raw_data: *mut xrecord::XRecordInterceptData) {
     let _data = InterceptData(raw_data);
 
     if data.category == xrecord::XRecordStartOfData {
+        // 创建 Context 不等于已经开始收事件；StartOfData 是向上层报告 Ready 的最早可靠时点。
         if let Some(ready) = GLOBAL_READY_CALLBACK.take() {
             if catch_unwind(AssertUnwindSafe(ready)).is_err() {
                 signal_callback_panic();
@@ -234,6 +241,8 @@ unsafe fn signal_callback_panic() {
     GLOBAL_READY_CALLBACK = None;
     GLOBAL_CALLBACK = None;
 
+    // XRecordEnableContext 是阻塞调用，仅设置错误标志无法唤醒它；禁用并 flush Context
+    // 才能让监听函数返回 CallbackPanic，进而允许应用重新启动监听器。
     if !CALLBACK_CONTROL_DISPLAY.is_null() && CALLBACK_CONTEXT != 0 {
         xrecord::XRecordDisableContext(CALLBACK_CONTROL_DISPLAY, CALLBACK_CONTEXT);
         xlib::XFlush(CALLBACK_CONTROL_DISPLAY);

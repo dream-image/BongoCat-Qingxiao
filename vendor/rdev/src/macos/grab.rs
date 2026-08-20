@@ -13,6 +13,7 @@ unsafe extern "C" fn raw_callback(
     cg_event: CGEventRef,
     _user_info: *mut c_void,
 ) -> CGEventRef {
+    // CoreGraphics 仍拥有传入事件；沿用 listen 的借用包装，避免临时 CGEvent 在回调结束时误释放它。
     let Some(cg_event_ref) = borrow_cg_event(cg_event) else {
         return cg_event;
     };

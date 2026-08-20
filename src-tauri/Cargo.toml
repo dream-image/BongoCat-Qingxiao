@@ -39,6 +39,8 @@ fs_extra = "1"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-locale = "2"
+# 使用仓库内维护分支，是因为 BongoCat 依赖监听就绪/失效通知以及 macOS Event Tap
+# 的 ABI、竞态和资源释放修复；升级 rdev 时必须先移植 vendor/rdev 中的这些改动。
 rdev = { path = "../vendor/rdev" }
 gilrs = { git = "https://github.com/ayangweb/gilrs", default-features = false, features = ["xinput"] }
 

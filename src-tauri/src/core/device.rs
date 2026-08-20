@@ -27,6 +27,7 @@ pub struct DeviceEvent {
     value: Value,
 }
 
+// 启动命令只负责创建阻塞监听线程，不能以命令返回作为成功依据；状态事件给前端提供真实握手与重试依据。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum DeviceListenerState {
@@ -49,13 +50,17 @@ enum ListenerLifecycle {
     Ready,
 }
 
+// 不能只用“是否正在监听”的布尔值：前端必须区分正在申请系统 Hook 和已经可接收事件，
+// 才能在权限变化、Event Tap 失效以及重复启动请求之间正确恢复。
 static LISTENER_STATE: Mutex<ListenerLifecycle> = Mutex::new(ListenerLifecycle::Stopped);
 
 struct ListeningGuard {
+    // 默认由 RAII 在安装失败或线程退出时复位；只有 macOS 的异步失败通道接管后才解除。
     reset_on_drop: bool,
 }
 
 impl ListeningGuard {
+    // 状态检查与 Starting 写入必须在同一把锁内完成，避免两个 IPC 请求同时创建系统 Hook。
     fn acquire() -> Result<Self, ListenerLifecycle> {
         let mut state = LISTENER_STATE
             .lock()
@@ -73,6 +78,7 @@ impl ListeningGuard {
 
     #[cfg(target_os = "macos")]
     fn detach(mut self) {
+        // macOS 的运行时失效由 failure 回调负责回到 Stopped；成功安装后 Guard 不再拥有状态。
         self.reset_on_drop = false;
     }
 }
@@ -94,6 +100,7 @@ pub fn start_device_listening<R: Runtime>(app_handle: AppHandle<R>) -> Result<()
         match ListeningGuard::acquire() {
             Ok(guard) => break guard,
             Err(_) => {
+                // acquire 失败后旧监听器可能恰好已退出，所以重新读状态；若已 Stopped 就立即重试。
                 let state = LISTENER_STATE
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -116,6 +123,7 @@ pub fn start_device_listening<R: Runtime>(app_handle: AppHandle<R>) -> Result<()
     emit_listener_status(&app_handle, DeviceListenerState::Starting, None);
 
     let spawn_error_handle = app_handle.clone();
+    // rdev 的监听循环是阻塞式的，必须放到专用线程，否则会占住 Tauri IPC 执行线程。
     thread::Builder::new()
         .name("device-listener".into())
         .spawn(move || {
@@ -176,17 +184,20 @@ pub fn start_device_listening<R: Runtime>(app_handle: AppHandle<R>) -> Result<()
             let result = {
                 let failure_app_handle = app_handle.clone();
                 let failure = move |err| {
+                    // Event Tap 可在安装成功后被系统撤销；必须先开放重新启动，再通知前端重试。
                     mark_listener_runtime_failed(
                         &failure_app_handle,
                         format!("Device listener stopped: {err:?}"),
                     );
                 };
+                // 第三方/FFI 回调发生 panic 时也要把生命周期复位，不能永久卡在 Starting/Ready。
                 catch_unwind(AssertUnwindSafe(|| {
                     listen_with_ready_and_error(callback, ready, failure)
                 }))
             };
 
             #[cfg(not(target_os = "macos"))]
+            // Windows/Linux 没有异步失效回调，监听循环退出本身就代表当前实例已不可用。
             let result = catch_unwind(AssertUnwindSafe(|| listen_with_ready(callback, ready)));
 
             #[cfg(target_os = "macos")]
@@ -246,6 +257,7 @@ fn emit_listener_unavailable<R: Runtime>(app_handle: &AppHandle<R>, error: Strin
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
+    // 只允许已经释放所有权的旧监听器发 Unavailable，避免它覆盖刚启动的新实例状态。
     if *state == ListenerLifecycle::Stopped {
         emit_listener_status(app_handle, DeviceListenerState::Unavailable, Some(error));
     }

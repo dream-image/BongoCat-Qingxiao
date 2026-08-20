@@ -15,11 +15,13 @@ pub type GrabCallback = fn(event: Event) -> Option<Event>;
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ListenError {
-    /// Callback
+    /// 用户回调 panic；各平台会先隔离 FFI 边界并清理 Hook，再把该错误返回给调用方。
     CallbackPanic,
     /// MacOS
     EventTapError,
+    /// Event Tap 在安装或运行期间被系统宣告失效，调用方可以在旧资源释放后重新监听。
     EventTapInvalidated,
+    /// 系统禁用了 Event Tap，且重新启用后的状态校验仍失败。
     EventTapDisabled,
     /// MacOS
     LoopSourceError,

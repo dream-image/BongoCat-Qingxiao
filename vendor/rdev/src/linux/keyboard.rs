@@ -33,6 +33,8 @@ pub struct Keyboard {
     serial: c_ulong,
 }
 
+// Keyboard::new 会依次创建 Display、XIM、Window、XIC，任一 `?` 提前返回都要释放此前资源。
+// 临时所有者负责初始化失败回滚，成功后再一次性转交给 Keyboard，避免 X11 句柄泄漏。
 struct KeyboardResources {
     display: *mut xlib::Display,
     xim: xlib::XIM,
@@ -51,6 +53,7 @@ impl KeyboardResources {
     }
 
     fn disarm(&mut self) {
+        // Keyboard 构造完成后由其 Drop 接管；清空临时句柄可防止作用域结束时双重销毁。
         self.display = null_mut();
         self.xim = null_mut();
         self.xic = null_mut();
@@ -83,6 +86,8 @@ unsafe fn release_keyboard_resources(
     xic: xlib::XIC,
     window: xlib::Window,
 ) {
+    // XIC 依赖 XIM，二者又依赖 Window/Display；严格按依赖的反序释放，避免初始化失败
+    // 或正常 Drop 时让后续清理访问已经关闭的 X11 资源。
     if !xic.is_null() {
         xlib::XUnsetICFocus(xic);
         xlib::XDestroyIC(xic);
@@ -190,6 +195,7 @@ impl Keyboard {
                 status: Box::new(0),
                 serial: 0,
             };
+            // 所有 X11 对象均已进入 Keyboard，至此才提交所有权。
             resources.disarm();
             Some(keyboard)
         }

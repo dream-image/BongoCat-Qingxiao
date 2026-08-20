@@ -50,6 +50,9 @@ const DEVICE_LEFT_ALT_FLAG: u64 = 0x00000020;
 const DEVICE_RIGHT_ALT_FLAG: u64 = 0x00000040;
 const DEVICE_RIGHT_CONTROL_FLAG: u64 = 0x00002000;
 
+// CGEventFlags 的公开聚合位无法区分同类修饰键的左右两侧。FlagsChanged 事件仍携带
+// 这些 device-specific 位，必须按物理 keycode 读取，才能正确处理左右键同时按住再释放其一。
+
 // https://developer.apple.com/documentation/coregraphics/cgeventtapplacement?language=objc
 pub type CGEventTapPlacement = u32;
 #[allow(non_upper_case_globals)]
@@ -124,6 +127,8 @@ extern "C" {
     pub fn KBGetLayoutType(iKeyboardType: SInt16) -> PhysicalKeyboardLayoutType;
 }
 
+// 必须逐字匹配 CoreGraphics 的 C 函数指针 ABI，并用裸 CGEventRef 表示参数/返回值；
+// 把 CGEvent Rust 包装类型按值放进 extern 签名会造成未定义行为。
 pub type QCallback = unsafe extern "C" fn(
     proxy: CGEventTapProxy,
     _type: CGEventType,
@@ -132,6 +137,8 @@ pub type QCallback = unsafe extern "C" fn(
 ) -> CGEventRef;
 
 pub unsafe fn borrow_cg_event(cg_event: CGEventRef) -> Option<ManuallyDrop<CGEvent>> {
+    // Event Tap 把 CGEventRef 的所有权保留在 CoreGraphics。`from_ptr` 只用于获得安全包装，
+    // ManuallyDrop 阻止包装器在回调结束时 CFRelease，否则系统随后继续使用会形成悬垂指针。
     if cg_event.is_null() {
         None
     } else {
@@ -240,6 +247,8 @@ pub unsafe fn convert(
         }
         CGEventType::FlagsChanged => {
             code = get_code(cg_event)?;
+            // 不能比较整组 flags 的大小来猜按下/释放：左右修饰键交错时位集合不具备时序含义。
+            // 未知修饰键退回查询当前物理状态，避免把所有 FlagsChanged 都误判成按下。
             let pressed = modifier_flag_for_code(code)
                 .map(|flag| cg_event.get_flags().bits() & flag != 0)
                 .unwrap_or_else(|| {

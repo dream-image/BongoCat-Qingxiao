@@ -140,6 +140,8 @@ class SpriteRenderer {
   private activeAnimation = ''
   private activeFrame = 0
   private animationFinished = false
+  // 每次播放都有唯一的完成句柄；新播放会以 interrupted 结算旧句柄，让上层状态机
+  // 区分“自然结束”和“被输入/切模型打断”，而不是依赖脆弱的固定时长计时。
   private activePlayback: ActivePlayback | null = null
   private frameStartedAt = 0
   private animationFrameId: number | null = null
@@ -148,6 +150,7 @@ class SpriteRenderer {
   private bindingIndexes = new Map<string, number>()
   private pressedKeyboard = new Map<string, string>()
   private pressedMouse = new Map<string, string>()
+  // Map 的插入顺序充当跨键盘/鼠标的最近按下栈，释放当前动作后才能恢复真正最后仍按住的绑定。
   private pressedInputOrder = new Map<string, PressedInput>()
   private bubbles: ActiveBubble[] = []
   private bubbleConfig: SpriteBubbleConfig = { ...defaultBubbleConfig }
@@ -163,6 +166,7 @@ class SpriteRenderer {
 
     const { animations, config } = await this.readAndValidateModel(path)
 
+    // 图片解码是异步的；旧模型即使后完成也不能重新初始化共用 Canvas。
     if (generation !== this.loadGeneration) {
       throw new DOMException('Sprite model load was superseded', 'AbortError')
     }
@@ -244,6 +248,8 @@ class SpriteRenderer {
 
     const animationName = this.resolveKeyboardBinding(bindingKey, binding)
 
+    // 宠物退出后按键可能已经松开，此入口只补播一次触发动作；即使资源配置为 loop，
+    // 也不能无限占住画面，结束后应回到仍按住的绑定或默认动画。
     return this.startPlayback(animationName, false)
   }
 
@@ -257,6 +263,7 @@ class SpriteRenderer {
 
     if (!animation || !returnTo || !this.animations.has(returnTo)) return null
 
+    // 先结算旧句柄再替换 activePlayback，保证等待者一定收到一次且只收到一次终止原因。
     this.settleActivePlayback('interrupted')
 
     this.stopAnimationFrame()
@@ -314,6 +321,7 @@ class SpriteRenderer {
 
       if (!keyboard) return false
 
+      // 宠物退出等过渡期会传 restore=false：只清理物理状态，不允许 release 抢播工作动画。
       if (!restore) return animationName !== void 0
 
       return this.releaseBinding(animationName, () => {
@@ -333,6 +341,7 @@ class SpriteRenderer {
     const animationName = this.resolveKeyboardBinding(bindingKey, binding)
 
     this.pressedKeyboard.set(key, animationName)
+    // 先删除再插入以更新最近按下顺序；Map.set 已存在键不会改变迭代位置。
     this.touchPressedInput('keyboard', key)
 
     return this.startPressedInputBinding(animationName)
@@ -347,6 +356,7 @@ class SpriteRenderer {
   }
 
   public syncPressedKeyboardBindings(keys: readonly string[]) {
+    // 模型切换时由运行时传入仍按住的重映射结果。这里仅同步状态，不展示气泡或伪造 down。
     const keyboard = this.config?.bindings?.keyboard ?? this.config?.keyboard
     const nextKeys = new Set(keys)
 
@@ -409,6 +419,7 @@ class SpriteRenderer {
   }
 
   public resumePressedInputBinding() {
+    // 当前动作结束/释放后优先恢复最近仍按住的循环动作，无可恢复项才回默认动画。
     const animationName = this.lastPressedLoopingAnimation()
 
     if (!animationName) return this.playDefault()
@@ -438,6 +449,7 @@ class SpriteRenderer {
 
       if (!mouse) return false
 
+      // 与键盘使用同一恢复规则，防止跨设备同时按住时释放一个输入错误回到默认动画。
       if (!restore) return animationName !== void 0
 
       return this.releaseBinding(animationName, () => {
@@ -505,6 +517,7 @@ class SpriteRenderer {
           continue
         }
 
+        // loop 属于本次播放语义而不只属于资源配置，按键可把同一资源作为一次性动作触发。
         if (this.activePlayback?.loop) {
           this.activeFrame = 0
           this.renderPending = true
@@ -518,6 +531,8 @@ class SpriteRenderer {
         const completedAnimation = this.activeAnimation
         const completedPlaybackLoop = this.activePlayback?.loop
         const returnTo = this.activePlayback?.returnTo
+        // 循环资源被强制按 one-shot 播放时，即使 returnTo 同名也要重启其循环语义；
+        // 普通同名返回则保持当前末帧，避免无意义地重新创建播放句柄。
         const shouldReturn = Boolean(returnTo
           && (returnTo !== completedAnimation
             || (completedPlaybackLoop === false
@@ -525,6 +540,7 @@ class SpriteRenderer {
 
         this.settleActivePlayback('finished')
 
+        // 先结算完成句柄，再启动 returnTo；否则启动新播放会把刚完成的句柄标成 interrupted。
         if (returnTo && shouldReturn) {
           this.play(returnTo)
 
@@ -537,6 +553,7 @@ class SpriteRenderer {
       }
 
       if (remainingAdvances === 0) {
+        // 长时间挂起后限制单帧追赶次数，避免恢复窗口时在主线程无限补帧。
         this.frameStartedAt = timestamp
       }
     }
@@ -590,6 +607,7 @@ class SpriteRenderer {
       const canvasWidth = this.config.canvas.width
       const canvasHeight = this.config.canvas.height
       const frameScale = Math.min(canvasWidth / frameWidth, canvasHeight / frameHeight)
+      // 模型画布和实际窗口都采用 contain 居中，必须与指针命中坐标的逆变换保持一致。
       const viewportScale = Math.min(
         this.canvas.width / canvasWidth,
         this.canvas.height / canvasHeight,
@@ -652,6 +670,7 @@ class SpriteRenderer {
       if (progress < 0 || progress >= 1) continue
 
       const slot = bubble.sequence % this.bubbleConfig.maxVisible
+      // 气泡从模型坐标锚点交替向两侧分槽，既从琴中央上浮，也避免连续按键完全重叠。
       const slotDirection = slot % 2 === 0 ? 1 : -1
       const slotDistance = Math.floor(slot / 2) + 0.62
       const slotOffset = slotDistance * slotDirection
@@ -690,6 +709,7 @@ class SpriteRenderer {
         - riseProgress * rise
         + Math.sin(phase * 0.72) * fontSize * 0.035 * motionProgress
       const enterScale = 0.62 + 0.38 * this.easeOutBack(enterProgress)
+      // 回弹叠加轻微 squash/stretch 和呼吸摆动，形成柔软感；退出阶段只轻收缩并淡出。
       const squashStretch = Math.sin(enterProgress * Math.PI) * (1 - enterProgress * 0.35)
       const breathing = Math.sin(phase * 0.82)
       const exitScale = 1 - this.smoothstep(exitProgress) * 0.09
@@ -1046,6 +1066,7 @@ class SpriteRenderer {
   }
 
   private releaseBinding(animationName: string | undefined, resume: () => boolean) {
+    // 只有释放的键正在驱动循环动画时才恢复；一次性动作应自然播完，其他键也不能被误打断。
     if (!animationName || animationName !== this.activeAnimation) return false
 
     const animation = this.animations.get(animationName)
@@ -1077,6 +1098,7 @@ class SpriteRenderer {
     if (!playback) return false
     if (animation?.config.loop) return true
 
+    // 一次性按键动画自然结束后再恢复仍按住的循环项；被新播放打断时由新播放接管。
     void playback.finished.then((result) => {
       if (result.reason === 'finished') this.resumePressedInputBinding()
     })
@@ -1122,6 +1144,7 @@ class SpriteRenderer {
 
     if (!animation || this.animationFinished) return false
 
+    // 单帧非循环播放也要走一次 tick 来结算 finished，否则状态机会永久等待。
     return animation.config.frames > 1 || this.activePlayback?.loop === false
   }
 
@@ -1136,6 +1159,7 @@ class SpriteRenderer {
   private reset() {
     this.stopAnimationFrame()
 
+    // 销毁时主动结算等待者，避免模型切换后遗留永不完成的 Promise。
     this.settleActivePlayback('destroyed')
 
     this.context?.clearRect(0, 0, this.canvas?.width ?? 0, this.canvas?.height ?? 0)
@@ -1165,6 +1189,7 @@ class SpriteRenderer {
 
     if (!playback) return
 
+    // 先清空再 resolve，Promise continuation 若立即发起新播放也不会重复结算旧句柄。
     this.activePlayback = null
     playback.resolve({ reason })
   }
@@ -1199,6 +1224,8 @@ class SpriteRenderer {
   }
 
   private assertConfig(config: unknown): asserts config is SpriteModelConfig {
+    // model.json 是可替换的外部模型输入。这里严格校验全部跨字段约束，避免错误配置进入
+    // 播放循环后才表现为裁切、Promise 不结束或按键无响应。
     if (!config || typeof config !== 'object') {
       throw new Error('Invalid sprite model config')
     }
@@ -1269,6 +1296,7 @@ class SpriteRenderer {
       throw new TypeError('Sprite model behaviors are invalid')
     }
 
+    // 行为动画引用和循环属性依赖完整动画表，必须在加载图片和启动控制器之前联合校验。
     assertPetBehaviorConfig(candidate.behaviors?.pet, {
       animations: candidate.animations,
       canvas: candidate.canvas,
@@ -1280,6 +1308,7 @@ class SpriteRenderer {
       throw new TypeError('Sprite model bindings are invalid')
     }
 
+    // 优先使用分组后的 bindings，同时保留顶层 keyboard/mouse 作为旧模型兼容入口。
     const keyboard = candidate.bindings?.keyboard ?? candidate.keyboard
 
     if (keyboard !== undefined
@@ -1299,6 +1328,7 @@ class SpriteRenderer {
       }
 
       if (animationNames.some((name) => {
+        // 使用 own-property，避免 __proto__/toString 一类名称被原型链误认为有效动画。
         return !Object.prototype.hasOwnProperty.call(candidate.animations, name)
       })) {
         throw new Error(`Sprite keyboard binding "${key}" references a missing animation`)
@@ -1394,6 +1424,7 @@ class SpriteRenderer {
     const requiredColumns = Math.min(animation.frames, animation.columns)
     const requiredRows = Math.ceil(animation.frames / animation.columns)
 
+    // 配置尺寸合法不代表图片装得下全部帧；提前核对实际解码尺寸可避免运行时抽到透明区。
     if (image.naturalWidth < requiredColumns * animation.frameWidth
       || image.naturalHeight < requiredRows * animation.frameHeight) {
       throw new Error(`Sprite animation "${name}" exceeds its spritesheet bounds`)
@@ -1413,6 +1444,7 @@ class SpriteRenderer {
   }
 
   private isDisplayableLabel(value: string) {
+    // macOS 事件可能把功能键编码成私用区字符，气泡应回退到规范键名而不是显示方框乱码。
     return Array.from(value).every((character) => {
       const codePoint = character.codePointAt(0) ?? 0
 
@@ -1425,6 +1457,7 @@ class SpriteRenderer {
   }
 
   private isRelativeAssetPath(value: unknown): value is string {
+    // 模型资源只能位于自身目录，拒绝绝对路径、协议和 ..，避免可分发模型越界读取本机文件。
     if (typeof value !== 'string' || value.trim().length === 0) return false
     if (/^(?:[\\/]|[a-z][a-z\d+.-]*:)/i.test(value)) return false
 

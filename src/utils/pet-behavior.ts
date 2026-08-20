@@ -1,3 +1,5 @@
+// 宠物行为只负责“何时进入/退出、选择哪个动作”，不直接依赖 Canvas、Tauri 或 Pinia。
+// 渲染、时钟和随机数都从依赖注入，目的是让模型配置可扩展，同时把平台输入与动画实现隔离开。
 export type PetBehaviorState
   = | 'work-idle'
     | 'pet-entering'
@@ -176,6 +178,7 @@ const defaultContext: PetBehaviorRuntimeContext = {
 }
 
 export const PET_MAX_TAP_DISTANCE = 6
+// 浏览器 setTimeout 超过 32 位有符号整数会溢出或被钳制，模型配置必须在入库前拒绝该值。
 const PET_MAX_TIMER_DELAY = 2_147_483_647
 
 export class PetBehaviorController {
@@ -189,6 +192,8 @@ export class PetBehaviorController {
   private currentState: PetBehaviorState = 'work-idle'
   private activationTimer: PetBehaviorTimer | undefined
   private autonomousTimer: PetBehaviorTimer | undefined
+  // lifecycleGeneration 作废旧定时器，playbackGeneration 作废旧动画回调；两者分开避免
+  // 单纯切换动画时误伤当前生命周期，也避免 clearTimeout 竞争下的陈旧回调改状态。
   private lifecycleGeneration = 0
   private playbackGeneration = 0
   private started = false
@@ -196,6 +201,7 @@ export class PetBehaviorController {
   private lastAutonomousAction: string | undefined
   private readonly cooldowns = new Map<string, number>()
   private readonly activeKeyboardInputs = new Set<string>()
+  // 多个按键在退出动画期间可能同时到达，共享同一个 Promise 才不会重复播放退出动作。
   private exitingPromise: Promise<boolean> | null = null
 
   public constructor(config: PetBehaviorConfig | undefined, dependencies: PetBehaviorDependencies) {
@@ -235,6 +241,7 @@ export class PetBehaviorController {
     this.exitingPromise = null
     this.setState('work-idle')
 
+    // 运行中切模型时沿用当前运行上下文，但必须从新的完整空闲周期重新计时。
     if (this.started && this.canRun()) this.scheduleActivation()
   }
 
@@ -262,6 +269,7 @@ export class PetBehaviorController {
     this.exitingPromise = null
 
     if (shouldRestore) {
+      // 窗口/画布已经不可见时不再播放退出过渡，直接恢复默认帧，避免下次显示停在半截宠物帧。
       if ((!this.context.visible
         || !this.context.rendererReady
         || !this.context.renderedVisible)
@@ -294,6 +302,7 @@ export class PetBehaviorController {
   public updateContext(patch: Partial<PetBehaviorRuntimeContext>) {
     if (this.destroyed) return
 
+    // 用属性存在性而不是值判断，调用方才能通过显式传入 undefined 清除持久化延时覆盖。
     const activationDelayChanged = 'activationDelayMs' in patch
 
     const wasOperational = this.canRun()
@@ -308,6 +317,7 @@ export class PetBehaviorController {
     if (patch.inputStatus !== void 0) {
       this.context.inputStatus = patch.inputStatus
 
+      // 监听中断后不保证还能收到 release；旧按压账本已不可信，恢复时由输入层重新同步。
       if (patch.inputStatus === 'unavailable') this.activeKeyboardInputs.clear()
     }
     if (patch.mouseInteractions !== void 0) {
@@ -322,10 +332,13 @@ export class PetBehaviorController {
     const isOperational = this.canRun()
 
     if (!isOperational) {
+      // enabled、真实可见性、渲染就绪和输入监听是同一运行闸门；任一失效都必须同时
+      // 取消计时器和播放 continuation，不能只隐藏画面却让后台状态机继续推进。
       this.invalidate()
       this.exitingPromise = null
 
       if (wasInPetMode && this.behaviorConfig) {
+        // 渲染不可用时不能依赖退出动画完成回调，直接落回默认动作最安全。
         if ((!this.context.visible
           || !this.context.rendererReady
           || !this.context.renderedVisible)
@@ -365,6 +378,7 @@ export class PetBehaviorController {
     for (const key of nextInputs) this.activeKeyboardInputs.add(key)
 
     if (this.activeKeyboardInputs.size > 0) {
+      // 按住任何物理输入都算工作态，即使当前模型没有对应动画绑定。
       this.clearActivationTimer()
 
       if (this.currentState !== 'work-idle' && this.canRunWithoutKeyboardInput()) {
@@ -375,6 +389,7 @@ export class PetBehaviorController {
     }
 
     if (hadActiveInputs && this.currentState === 'work-idle' && this.canRun()) {
+      // 只有最后一个输入释放后才重新开始完整空闲计时，避免从旧计时进度提前激活。
       this.scheduleActivation()
     }
   }
@@ -394,6 +409,7 @@ export class PetBehaviorController {
 
     if (this.currentState === 'work-idle') return false
 
+    // key repeat 不重复触发退出；第一个物理 down 已经负责把宠物切回工作态。
     if (isFirstPress) void this.exitForInput()
 
     return true
@@ -442,6 +458,7 @@ export class PetBehaviorController {
     }
 
     const promise = playback.handle.finished.then((result) => {
+      // 新模型/新播放已推进 generation 时，本次完成只能结算 Promise，不能覆盖新状态。
       if (!this.isPlaybackCurrent(playback)) return false
 
       this.exitingPromise = null
@@ -470,6 +487,7 @@ export class PetBehaviorController {
     const config = this.behaviorConfig
 
     if (!config || !this.canRun() || !this.context.mouseInteractions) return false
+    // 过渡动画和既有交互动作不可重入；否则一次移动会不断打断并重启动画首帧。
     if (this.currentState === 'work-idle'
       || this.currentState === 'pet-entering'
       || this.currentState === 'pet-exiting'
@@ -502,6 +520,7 @@ export class PetBehaviorController {
     }
 
     this.clearAutonomousTimer()
+    // 冷却在播放前写入，防止同一帧的多个重叠命中区绕过限制并发触发。
     this.cooldowns.set(interaction.id, now)
     this.setState('pet-interaction')
 
@@ -542,10 +561,12 @@ export class PetBehaviorController {
   }
 
   private canRun() {
+    // 输入集合是独立闸门：没有动画绑定的键也必须阻止宠物把用户误判为空闲。
     return this.canRunWithoutKeyboardInput() && this.activeKeyboardInputs.size === 0
   }
 
   private canRunWithoutKeyboardInput() {
+    // visible 是业务设置，renderedVisible 是 DOM/窗口实际展示结果；两者都成立才允许计时。
     return Boolean(
       this.behaviorConfig
       && this.started
@@ -567,6 +588,7 @@ export class PetBehaviorController {
     const generation = this.lifecycleGeneration
     const delay = this.context.activationDelayMs ?? config.activationDelayMs
     const timer = this.clock.setTimeout(() => {
+      // 同时核对 timer 身份和 generation，覆盖“计时器已触发排队后才被取消”的竞态。
       if (this.activationTimer !== timer || generation !== this.lifecycleGeneration) return
 
       this.activationTimer = void 0
@@ -623,6 +645,7 @@ export class PetBehaviorController {
     const [minimum, maximum] = autonomous.delayMs
     const delay = minimum + (maximum - minimum) * this.nextRandom()
     const timer = this.clock.setTimeout(() => {
+      // 配置、可见性或状态在等待期间变化时，旧随机动作不得落到新的生命周期。
       if (this.autonomousTimer !== timer || generation !== this.lifecycleGeneration) return
 
       this.autonomousTimer = void 0
@@ -646,6 +669,7 @@ export class PetBehaviorController {
     })
 
     if (eligible.length > 1 && this.lastAutonomousAction) {
+      // 有替代项时避免连续选择同一动作，让有限雪碧动作看起来不机械；仅一项时仍允许重播。
       eligible = eligible.filter(action => action.id !== this.lastAutonomousAction)
     }
 
@@ -660,6 +684,7 @@ export class PetBehaviorController {
     let selected = eligible[eligible.length - 1]
 
     for (const action of eligible) {
+      // 使用累计权重而非数组下标随机，模型作者可以稳定调节动作出现频率。
       cursor -= action.weight
 
       if (cursor < 0) {
@@ -687,6 +712,7 @@ export class PetBehaviorController {
 
   private finishPetPlayback(playback: ActivePlayback) {
     void playback.handle.finished.then((result) => {
+      // 被按键、交互或模型切换打断的动作不能回到 pet-idle，否则会和工作动画争夺画面。
       if (!this.isPlaybackCurrent(playback)) return
 
       if (result.reason !== 'finished' || !this.canRun()) {
@@ -707,6 +733,7 @@ export class PetBehaviorController {
   }
 
   private beginPlayback(animation: string, returnTo?: string): ActivePlayback | null {
+    // 每次播放先推进代次，因此旧 finished 即使晚到也无法驱动当前状态机。
     const generation = ++this.playbackGeneration
     const handle = this.driver.play(animation, { returnTo })
 
@@ -722,6 +749,7 @@ export class PetBehaviorController {
   private nextRandom() {
     const value = this.random()
 
+    // 自定义随机源也可能返回异常值；钳制到 [0, 1) 可避免权重游标越界。
     if (!Number.isFinite(value)) return 0
 
     return Math.min(Math.max(value, 0), 1 - Number.EPSILON)
@@ -737,6 +765,7 @@ export class PetBehaviorController {
   }
 
   private invalidate() {
+    // clearTimeout 不能保证撤回已进入任务队列的回调，generation 才是最终的失效凭证。
     this.lifecycleGeneration++
     this.playbackGeneration++
     this.clearTimers()
@@ -768,15 +797,19 @@ export function assertPetBehaviorConfig(
 ): asserts value is PetBehaviorConfig | undefined {
   if (value === void 0) return
 
+  // 行为配置来自模型文件，必须在资源加载阶段一次性拒绝无效引用；运行中静默跳过会让
+  // 状态机停在过渡态，并把问题伪装成偶发的鼠标/键盘失灵。
   assertRecord(value, 'Pet behavior')
   assertPositiveTimerDelay(value.activationDelayMs, 'Pet behavior activationDelayMs')
   assertNonEmptyString(value.enterAnimation, 'Pet behavior enterAnimation')
   assertNonEmptyString(value.idleAnimation, 'Pet behavior idleAnimation')
   assertNonEmptyString(value.exitAnimation, 'Pet behavior exitAnimation')
   assertAnimation(value.enterAnimation, false, context, 'Pet behavior enterAnimation')
+  // idle 必须循环，进入/退出和动作必须结束，控制器才能可靠收到完成信号推进状态。
   assertAnimation(value.idleAnimation, true, context, 'Pet behavior idleAnimation')
   assertAnimation(value.exitAnimation, false, context, 'Pet behavior exitAnimation')
 
+  // 自主动作和交互共用 cooldown Map，ID 也必须共用一个命名空间，避免互相覆盖冷却时间。
   const ids = new Set<string>()
 
   if (value.autonomous !== void 0) {
@@ -815,6 +848,7 @@ export function assertPetBehaviorConfig(
 
     const totalWeight = actions.reduce((total, action) => total + action.weight, 0)
 
+    // 单项权重虽都有限，加总仍可能溢出；无限总权重会破坏累计权重选择。
     if (!Number.isFinite(totalWeight)) {
       throw new RangeError('Pet behavior autonomous action weights total must be finite')
     }
@@ -859,6 +893,7 @@ export function assertPetBehaviorConfig(
 
       const semanticBinding = `${interaction.event}:${interaction.area}`
 
+      // 同一区域同一事件只允许一个动作，避免配置顺序悄悄决定实际行为。
       if (semanticBindings.has(semanticBinding)) {
         throw new TypeError(`${label} duplicates the ${semanticBinding} interaction`)
       }
@@ -885,6 +920,7 @@ export function assertPetBehaviorConfig(
         if (interaction.distance !== void 0) {
           assertPositiveNumber(interaction.distance, `${label}.distance`)
 
+          // 轻点判定的全局手势阈值是硬上限，模型不能把明显拖动重新定义成 tap。
           if (interaction.distance > PET_MAX_TAP_DISTANCE) {
             throw new RangeError(`${label}.distance cannot exceed ${PET_MAX_TAP_DISTANCE}`)
           }
@@ -989,6 +1025,7 @@ function assertHitArea(value: unknown, canvas: { width: number, height: number }
     }, 0)
 
     if (twiceArea === 0) {
+      // 三个以上共线点仍不是可命中的多边形，必须显式拒绝退化区域。
       throw new TypeError(`${label}.points must form a non-zero-area polygon`)
     }
 
@@ -1004,6 +1041,7 @@ function assertAnimation(
   context: PetBehaviorValidationContext,
   label: string,
 ) {
+  // 不使用普通属性读取，防止模型键名命中 Object.prototype 而被误判成真实动画。
   const animation = Object.prototype.hasOwnProperty.call(context.animations, name)
     ? context.animations[name]
     : void 0
@@ -1085,6 +1123,7 @@ function isPointInHitArea(point: PetPoint, area: PetHitArea) {
 
   let inside = false
 
+  // 射线奇偶规则同时支持凹多边形，模型作者不必把复杂角色区域拆成多个矩形。
   for (let index = 0, previous = area.points.length - 1; index < area.points.length; previous = index++) {
     const currentPoint = area.points[index]
     const previousPoint = area.points[previous]

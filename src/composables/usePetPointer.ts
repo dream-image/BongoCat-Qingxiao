@@ -44,6 +44,8 @@ export function usePetPointer(
   let hoverSignature = ''
   let hoverTimer: ReturnType<typeof setTimeout> | undefined
 
+  // 指针交互只能建立在“用户实际看得见且窗口真正接收事件”的精灵上，否则命中区会和画面错位，
+  // 也可能在穿透/悬停隐藏期间截走本应交给桌面的点击。
   function canInteract() {
     return modelStore.currentModel?.renderer === 'sprite'
       && modelStore.modelReady
@@ -68,6 +70,8 @@ export function usePetPointer(
 
     if (bounds.width <= 0 || bounds.height <= 0) return
 
+    // 渲染器用 contain 方式等比绘制，命中测试必须反算同一份留白和缩放；直接使用 DOM 坐标
+    // 会在窗口比例变化后把透明留白误认为角色。镜像只改变模型 X，不改变屏幕端的移动距离。
     const scale = Math.min(bounds.width / size.width, bounds.height / size.height)
     const renderedWidth = size.width * scale
     const renderedHeight = size.height * scale
@@ -97,6 +101,7 @@ export function usePetPointer(
     areas: string[],
     metrics: { holdMs?: number, distance?: number, elapsedMs?: number } = {},
   ) {
+    // 重叠命中区按 hitAreas 的声明顺序尝试，首个成功动作即消费事件，避免一次手势抢播多段动画。
     return areas.some((area) => {
       return modelRuntime.handlePetInteraction({ event, area, point, ...metrics })
     })
@@ -115,6 +120,7 @@ export function usePetPointer(
     const areas = modelRuntime.hitTestPetPointer(point)
     const signature = areas.join('\0')
 
+    // 同一组重叠命中区只启动一个 hold 计时器，避免每次 pointermove 都把悬停延后。
     if (signature === hoverSignature) return
 
     clearHover()
@@ -129,6 +135,7 @@ export function usePetPointer(
     const trigger = () => {
       hoverTimer = void 0
 
+      // 定时器触发时窗口/模型可能已经切换；签名用于拒绝旧命中区留下的延迟动作。
       if (!canInteract() || hoverSignature !== signature) {
         if (hoverSignature === signature) hoverSignature = ''
 
@@ -168,6 +175,8 @@ export function usePetPointer(
     const hasStrokeInteraction = strokeAreas.length > 0
     const pointerBlocked = modelRuntime.isPetPointerBlocked()
 
+    // 只为模型声明过的区域接管指针。进入/退出动画期间仍要吞掉已命中区域的手势，
+    // 防止一次按下先落到角色、随后又意外转成窗口拖动。
     if (!hasTapInteraction && !hasStrokeInteraction && !(pointerBlocked && areas.length > 0)) {
       return false
     }
@@ -194,6 +203,7 @@ export function usePetPointer(
     element.addEventListener('lostpointercapture', handleLostPointerCapture)
 
     try {
+      // capture 保证移出角色甚至移出窗口后仍能收到 up/cancel，手势状态不会永久残留。
       element.setPointerCapture(event.pointerId)
     } catch {
       clearGesture(false)
@@ -230,6 +240,8 @@ export function usePetPointer(
 
     const strokeStep = updateGesturePosition(gesture, position)
 
+    // 手势开始后若状态机进入不可交互阶段，本次手势必须一直消费到抬起；中途重新开放
+    // 会把同一次按压错误识别成新的轻点或抚摸。
     if (gesture.consumeUntilUp || modelRuntime.isPetPointerBlocked()) {
       gesture.consumeUntilUp = true
       gesture.tapCancelled = true
@@ -253,6 +265,7 @@ export function usePetPointer(
     const areas = modelRuntime.hitTestPetPointer(point)
     const activeAreas = new Set(areas)
 
+    // 抚摸距离仅在同一命中区内累计。离开区域后继续累计会让绕过角色的窗口拖动误触动作。
     for (const area of gesture.strokeDistances.keys()) {
       if (!activeAreas.has(area)) gesture.strokeDistances.delete(area)
     }
@@ -307,6 +320,8 @@ export function usePetPointer(
     const areas = position?.inside ? new Set(modelRuntime.hitTestPetPointer(point)) : new Set<string>()
     const candidates = current.tapAreas.filter(area => areas.has(area))
 
+    // 轻点要求按下和抬起仍在同一区域，并使用屏幕像素限制抖动；模型坐标会随窗口缩放，
+    // 不适合作为不同缩放比例下稳定的点击阈值。
     if (position?.inside
       && !current.tapCancelled
       && !current.strokeTriggered
@@ -384,6 +399,8 @@ export function usePetPointer(
       return false
     }
 
+    // 一旦所有抚摸候选都失效且移动超过轻点阈值，就把控制权交回原窗口拖动逻辑，
+    // 这样新增宠物命中区不会破坏用户拖拽桌宠的既有操作。
     clearGesture()
     void startDragging()
 

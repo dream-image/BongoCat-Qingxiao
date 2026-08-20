@@ -29,6 +29,7 @@ export interface CursorPoint {
 }
 
 interface PressedKeyboardInput {
+  // code 是稳定的物理输入；renderKey 会随当前模型的支持键规则变化。
   code: string
   renderKey?: string
 }
@@ -54,6 +55,7 @@ interface DeviceListenerStatus {
 type DeviceEvent = MouseButtonEvent | MouseMoveEvent | KeyboardEvent
 
 const DAMPING_DECAY = 0.75
+// 重启采用有上限的指数退避；连续稳定后才清零，避免故障循环高频占用 CPU。
 const DEVICE_RETRY_BASE_DELAY = 500
 const DEVICE_RETRY_MAX_DELAY = 8000
 const DEVICE_RETRY_MAX_ATTEMPTS = 6
@@ -80,6 +82,7 @@ export function useDevice() {
     handleMouseMove,
   } = useModel()
   let unmounted = false
+  // 所有跨 await/timer 的任务都用代次判旧，卸载后不得再写组件或 runtime 状态。
   let lifecycleGeneration = 0
   let listenerState: DeviceListenerStatus['state'] = 'unavailable'
   let retryAttempt = 0
@@ -91,12 +94,14 @@ export function useDevice() {
   let permissionFlow: Promise<boolean> | undefined
   let permissionPromptRequested = false
   let hideOnHoverTimer: ReturnType<typeof setTimeout> | undefined
+  // 配置可见不等于窗口已渲染；hover 隐藏也需要单独记录，供宠物行为门禁使用。
   let pointerInsideMainWindow = false
   let hoverHidden = false
   let actualWindowVisible = false
   let windowVisibilityGeneration = 0
   let unlistenWindowClose = () => {}
   let desiredIgnoreCursorEvents = false
+  // Tauri 写入是异步的，用单一任务收敛到最后一次期望值，避免完成顺序倒置。
   let ignoreCursorEventsTask: Promise<void> | undefined
 
   const clearRetryTimer = () => {
@@ -134,6 +139,7 @@ export function useDevice() {
   }
 
   const releaseInputState = () => {
+    // 监听器中断时 release 事件可能永远不到达，必须以本地账本主动归零全部输入。
     clearReleaseTimers()
 
     const keyboardInputs = [...pressedKeyboardInputs.entries()]
@@ -179,12 +185,14 @@ export function useDevice() {
   }
 
   onMounted(async () => {
+    // 初始化读取真实窗口状态，不能仅相信持久化的 visible 配置。
     void reconcileWindowVisibility()
 
     const nextUnlistenWindowClose = await appWindow.onCloseRequested(() => {
       void reconcileWindowVisibility(false)
     })
 
+    // onCloseRequested 的订阅也是异步的，解决后若已卸载必须立即反订阅。
     if (unmounted) {
       nextUnlistenWindowClose()
     } else {
@@ -201,6 +209,7 @@ export function useDevice() {
   })
 
   onUnmounted(() => {
+    // 推进两个代次，使监听重启、权限轮询和窗口可见性轮询的迟到结果全部失效。
     unmounted = true
     ++lifecycleGeneration
     ++windowVisibilityGeneration
@@ -218,6 +227,7 @@ export function useDevice() {
   })
 
   const waitForPermissionPoll = () => new Promise<void>((resolve) => {
+    // 保存 resolve，使卸载时能主动唤醒轮询，避免 Promise 长时间悬挂。
     permissionPollResolve = resolve
     permissionPollTimer = setTimeout(() => {
       permissionPollTimer = void 0
@@ -237,6 +247,7 @@ export function useDevice() {
 
   const ensureInputMonitoringPermission = async () => {
     if (!isMac) return true
+    // 多次重启请求共享同一个授权流程，避免重复弹系统授权窗口。
     if (permissionFlow) return permissionFlow
 
     const nextPermissionFlow = (async () => {
@@ -260,6 +271,7 @@ export function useDevice() {
   }
 
   const getSupportedKey = (key: string) => {
+    // sprite 自己负责按键分组；Live2D 缺少左右修饰键/Fn 资源时才回退到通用键。
     if (modelStore.currentModel?.renderer === 'sprite') return key
 
     let nextKey = key
@@ -288,6 +300,7 @@ export function useDevice() {
   }
 
   const syncRenderedVisibility = () => {
+    // 自主行为只允许在用户确实能看到角色时运行，逻辑 visible 只是必要条件之一。
     modelRuntime.updatePetRuntimeContext({
       renderedVisible: !unmounted
         && catStore.window.visible
@@ -299,6 +312,7 @@ export function useDevice() {
   const syncIgnoreCursorEvents = () => {
     desiredIgnoreCursorEvents = hoverHidden || catStore.window.passThrough
 
+    // 已有写任务会在完成后读取最新期望值并继续，不并发调用系统 API。
     if (ignoreCursorEventsTask) return
 
     const nextTask = (async () => {
@@ -328,6 +342,7 @@ export function useDevice() {
   }
 
   const reconcileWindowVisibility = async (expected?: boolean) => {
+    // showWindow 返回与系统真正显示之间有延迟；轮询并用代次丢弃旧 show/hide 结果。
     const generation = ++windowVisibilityGeneration
 
     if (expected === false) {
@@ -376,6 +391,7 @@ export function useDevice() {
       document.body.style.removeProperty('opacity')
     }
 
+    // 视觉隐藏与鼠标穿透必须作为一次状态转换同步更新。
     syncRenderedVisibility()
     syncIgnoreCursorEvents()
   }
@@ -388,6 +404,7 @@ export function useDevice() {
 
   watch(() => catStore.model.ignoreMouse, (value) => {
     if (value) {
+      // 禁用鼠标时清除平滑队列、hover 定时器和已按按钮，避免恢复后补播旧交互。
       latestCursorPoint.value = void 0
       smoothedCursorPoint.value = void 0
       resetHideOnHover()
@@ -412,6 +429,7 @@ export function useDevice() {
     const isInWindow = inBetween(x, winX, winX + width)
       && inBetween(y, winY, winY + height)
 
+    // 只在跨越窗口边界时建/撤定时器，普通移动不应不断延后隐藏。
     if (isInWindow === pointerInsideMainWindow) return
 
     pointerInsideMainWindow = isInWindow
@@ -426,6 +444,7 @@ export function useDevice() {
     hideOnHoverTimer = setTimeout(() => {
       hideOnHoverTimer = void 0
 
+      // 定时器触发前设置可能已改变，提交隐藏前重新验证全部前置条件。
       if (unmounted
         || !catStore.window.visible
         || !catStore.window.hideOnHover
@@ -441,6 +460,7 @@ export function useDevice() {
     () => catStore.window.hideOnHover,
     () => catStore.window.visible,
   ], ([hideOnHover, visible]) => {
+    // 任一门禁关闭都立即取消待执行隐藏，防止旧 timer 反向覆盖新配置。
     if (!visible) {
       void reconcileWindowVisibility(false)
       resetHideOnHover()
@@ -488,6 +508,7 @@ export function useDevice() {
   }
 
   const prepareModelTransition = () => {
+    // 模型切换只暂停视觉映射，保留真实按压账本，用户持续按键仍应阻止 idle 行为。
     for (const input of pressedKeyboardInputs.values()) {
       input.renderKey = void 0
     }
@@ -497,6 +518,7 @@ export function useDevice() {
   }
 
   const remapPressedKeyboardInputs = () => {
+    // 新模型资源就绪后按原始 code 重新求 renderKey；不生成新气泡，也不伪造新按键。
     const mappings: Array<{ inputId: string, renderKey: string }> = []
 
     for (const [inputId, input] of pressedKeyboardInputs) {
@@ -518,6 +540,7 @@ export function useDevice() {
 
     releaseTimers.delete(inputId)
 
+    // release 以物理 inputId 定位，再交给 runtime 判断共享 renderKey 是否仍被其他输入占用。
     const renderKey = pressedKeyboardInputs.get(inputId)?.renderKey
 
     pressedKeyboardInputs.delete(inputId)
@@ -537,6 +560,7 @@ export function useDevice() {
     label?: string | null,
   ) => {
     const activeInput = pressedKeyboardInputs.get(inputId)
+    // 重复 press 沿用已绑定的 renderKey，避免模型资源变化中途造成一键对应两张贴图。
     const renderKey = activeInput?.renderKey ?? getSupportedKey(code)
 
     pressedKeyboardInputs.delete(inputId)
@@ -553,6 +577,7 @@ export function useDevice() {
   ) => {
     if (modelStore.modelReady) return handleKeyboardPress(inputId, code, label)
 
+    // 渲染器未就绪时仍登记真实输入，既保护 idle 门禁，也供加载完成后无缝 remap。
     const activeInput = pressedKeyboardInputs.get(inputId)
 
     pressedKeyboardInputs.set(inputId, {
@@ -570,6 +595,7 @@ export function useDevice() {
   ) => {
     registerKeyboardPress(inputId, code, label)
 
+    // timer 必须按物理输入编号覆盖，Windows 的重复 press 才不会提前释放新一次按压。
     const previousTimer = releaseTimers.get(inputId)
 
     if (previousTimer) clearTimeout(previousTimer)
@@ -632,6 +658,7 @@ export function useDevice() {
       listenerState = payload.state
 
       if (payload.state === 'unavailable') {
+        // 后端 tap 失效意味着输入账本不再可信，先归零，再安排有限重试。
         clearReadyResetTimer()
         releaseInputState()
         scheduleListenerRestart()
@@ -641,6 +668,7 @@ export function useDevice() {
         if (payload.state === 'ready') {
           clearReadyResetTimer()
 
+          // 短暂 ready 仍可能是崩溃循环，稳定一段时间后才恢复完整重试预算。
           const generation = lifecycleGeneration
           readyResetTimer = setTimeout(() => {
             readyResetTimer = void 0
@@ -666,6 +694,7 @@ export function useDevice() {
   function scheduleListenerRestart() {
     if (unmounted || retryTimer || retryAttempt >= DEVICE_RETRY_MAX_ATTEMPTS) return
 
+    // 指数退避有次数与时长上限，既允许瞬时恢复，也避免永久故障时忙循环。
     const generation = lifecycleGeneration
     const delay = Math.min(
       DEVICE_RETRY_BASE_DELAY * 2 ** retryAttempt,
@@ -681,6 +710,7 @@ export function useDevice() {
       }
 
       if (listenerStart) {
+        // 与在途启动撞车不消耗一次重试额度，稍后继续按原次数调度。
         --retryAttempt
         scheduleListenerRestart()
 
@@ -698,6 +728,7 @@ export function useDevice() {
     const generation = lifecycleGeneration
     const nextListenerStart = (async () => {
       try {
+        // 必须先订阅数据和状态事件，再启动后端生产者，否则会漏掉首次 ready/unavailable。
         await Promise.all([deviceListenerReady, deviceStatusListenerReady])
 
         if (unmounted || generation !== lifecycleGeneration) return
@@ -735,6 +766,7 @@ export function useDevice() {
   }
 
   const startListening = () => {
+    // 在收到后端 ready 之前保持不可用，防止自主行为在输入盲区误触发。
     modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
 
     return requestListenerStart()
