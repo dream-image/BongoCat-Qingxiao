@@ -87,6 +87,13 @@ unsafe extern "C" fn raw_callback(
         let _callback_guard = CALLBACK_GATE
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if matches!(
+            _type,
+            CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput
+        ) {
+            handle_disabled_event_tap();
+            return;
+        }
         let Some(cg_event_ref) = borrow_cg_event(cg_event) else {
             return;
         };
@@ -95,24 +102,37 @@ unsafe extern "C" fn raw_callback(
         }))
         .is_err()
         {
-            stop_listener_after_callback_panic();
+            stop_listener_after_runtime_failure(ListenError::CallbackPanic);
         }
     }));
 
     cg_event
 }
 
-unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event::CGEvent) {
-    if matches!(
-        event_type,
-        CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput
-    ) {
-        if listener_accepts_events() && !EVENT_TAP.is_null() {
-            CGEventTapEnable(EVENT_TAP, true);
+unsafe extern "C" fn raw_invalidation_callback(tap: CFMachPortRef, _info: *mut c_void) {
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _callback_guard = CALLBACK_GATE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        if tap == EVENT_TAP {
+            stop_listener_after_runtime_failure(ListenError::EventTapInvalidated);
         }
+    }));
+}
+
+unsafe fn handle_disabled_event_tap() {
+    if !listener_accepts_events() || EVENT_TAP.is_null() {
         return;
     }
 
+    CGEventTapEnable(EVENT_TAP, true);
+    if !CGEventTapIsEnabled(EVENT_TAP) {
+        stop_listener_after_runtime_failure(ListenError::EventTapDisabled);
+    }
+}
+
+unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event::CGEvent) {
     if !listener_accepts_events() {
         return;
     }
@@ -122,7 +142,7 @@ unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event:
             if let Some(event) = convert(event_type, cg_event, keyboard) {
                 if let Some(callback) = &mut GLOBAL_CALLBACK {
                     if catch_unwind(AssertUnwindSafe(|| callback(event))).is_err() {
-                        stop_listener_after_callback_panic();
+                        stop_listener_after_runtime_failure(ListenError::CallbackPanic);
                     }
                 }
             }
@@ -131,52 +151,53 @@ unsafe fn handle_event(event_type: CGEventType, cg_event: &core_graphics::event:
 }
 
 fn listener_accepts_events() -> bool {
-    matches!(
-        LISTENER_PHASE.load(Ordering::Acquire),
-        LISTENER_INSTALLING | LISTENER_COMMITTED
-    )
+    LISTENER_PHASE.load(Ordering::Acquire) == LISTENER_COMMITTED
 }
 
-unsafe fn stop_listener_after_callback_panic() {
+unsafe fn stop_listener_after_runtime_failure(error: ListenError) {
     let previous_phase = loop {
         let phase = LISTENER_PHASE.load(Ordering::Acquire);
         if !matches!(phase, LISTENER_INSTALLING | LISTENER_COMMITTED) {
             return;
         }
+        let failure_phase = if phase == LISTENER_INSTALLING {
+            LISTENER_SETUP_FAILED
+        } else {
+            LISTENER_CALLBACK_FAILED
+        };
         if LISTENER_PHASE
-            .compare_exchange(
-                phase,
-                LISTENER_CALLBACK_FAILED,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
+            .compare_exchange(phase, failure_phase, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
         {
             break phase;
         }
     };
 
-    let failure_callback = GLOBAL_FAILURE_CALLBACK.take();
     let tap = EVENT_TAP;
     let source = EVENT_SOURCE;
+
+    if previous_phase == LISTENER_INSTALLING {
+        if !tap.is_null() {
+            CFMachPortSetInvalidationCallBack(tap, None);
+        }
+        return;
+    }
+
+    let failure_callback = GLOBAL_FAILURE_CALLBACK.take();
 
     EVENT_TAP = null();
     EVENT_SOURCE = null_mut();
     GLOBAL_CALLBACK = None;
 
     if !tap.is_null() {
+        CFMachPortSetInvalidationCallBack(tap, None);
         CGEventTapEnable(tap, false);
     }
     if !source.is_null() {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), source, kCFRunLoopCommonModes);
     }
 
-    let failure_callback = if previous_phase == LISTENER_COMMITTED {
-        failure_callback
-    } else {
-        None
-    };
-    release_listener_resources_async(tap, source, failure_callback);
+    release_listener_resources_async(tap, source, failure_callback, error);
 }
 
 unsafe fn cleanup_setup_listener(
@@ -187,14 +208,18 @@ unsafe fn cleanup_setup_listener(
     let tap_address = tap as usize;
     let source_address = source as usize;
     let cleanup = move || unsafe {
+        let tap = tap_address as CFMachPortRef;
+        let source = source_address as CFRunLoopSourceRef;
+        if !tap.is_null() {
+            CFMachPortSetInvalidationCallBack(tap, None);
+        }
+
         GLOBAL_CALLBACK = None;
         GLOBAL_FAILURE_CALLBACK = None;
         EVENT_TAP = null();
         EVENT_SOURCE = null_mut();
         LISTENER_PHASE.store(LISTENER_INACTIVE, Ordering::Release);
 
-        let tap = tap_address as CFMachPortRef;
-        let source = source_address as CFRunLoopSourceRef;
         if !tap.is_null() {
             CGEventTapEnable(tap, false);
         }
@@ -220,6 +245,7 @@ unsafe fn release_listener_resources_async(
     tap: CFMachPortRef,
     source: CFRunLoopSourceRef,
     failure_callback: Option<Box<dyn FnOnce(ListenError) + Send>>,
+    error: ListenError,
 ) {
     let tap_address = tap as usize;
     let source_address = source as usize;
@@ -230,9 +256,15 @@ unsafe fn release_listener_resources_async(
         if tap_address != 0 {
             CFRelease((tap_address as *const c_void).cast());
         }
+        let _ = LISTENER_PHASE.compare_exchange(
+            LISTENER_CALLBACK_FAILED,
+            LISTENER_INACTIVE,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
         if let Some(failure_callback) = failure_callback {
             let _ = catch_unwind(AssertUnwindSafe(|| {
-                failure_callback(ListenError::CallbackPanic);
+                failure_callback(error);
             }));
         }
     });
@@ -300,13 +332,18 @@ where
         EVENT_SOURCE = source;
 
         LISTENER_PHASE.store(LISTENER_INSTALLING, Ordering::Release);
-        CGEventTapEnable(tap, true);
+        CFMachPortSetInvalidationCallBack(tap, Some(raw_invalidation_callback));
         {
             let _callback_guard = CALLBACK_GATE
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             if LISTENER_PHASE.load(Ordering::Acquire) != LISTENER_INSTALLING {
-                return Err(ListenError::CallbackPanic);
+                return Err(ListenError::EventTapInvalidated);
+            }
+            CGEventTapEnable(tap, true);
+            if !CGEventTapIsEnabled(tap) {
+                LISTENER_PHASE.store(LISTENER_SETUP_FAILED, Ordering::Release);
+                return Err(ListenError::EventTapDisabled);
             }
             if catch_unwind(AssertUnwindSafe(ready)).is_err() {
                 let _ = LISTENER_PHASE.compare_exchange(

@@ -19,6 +19,8 @@ pub enum ListenError {
     CallbackPanic,
     /// MacOS
     EventTapError,
+    EventTapInvalidated,
+    EventTapDisabled,
     /// MacOS
     LoopSourceError,
     /// Linux

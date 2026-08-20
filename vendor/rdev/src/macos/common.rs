@@ -61,6 +61,7 @@ lazy_static! {
 
 // https://developer.apple.com/documentation/coregraphics/cgeventmask?language=objc
 pub type CGEventMask = u64;
+pub type CFMachPortInvalidationCallback = Option<unsafe extern "C" fn(CFMachPortRef, *mut c_void)>;
 #[allow(non_upper_case_globals)]
 pub const kCGEventMaskForAllEvents: u64 = (1 << CGEventType::LeftMouseDown as u64)
     + (1 << CGEventType::LeftMouseUp as u64)
@@ -96,6 +97,11 @@ extern "C" {
     pub fn CFRunLoopRemoveSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFRunLoopMode);
     pub fn CFRunLoopGetMain() -> CFRunLoopRef;
     pub fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
+    pub fn CGEventTapIsEnabled(tap: CFMachPortRef) -> bool;
+    pub fn CFMachPortSetInvalidationCallBack(
+        port: CFMachPortRef,
+        callback: CFMachPortInvalidationCallback,
+    );
     pub fn CFRunLoopRun();
     pub fn CFRunLoopStop(rl: CFRunLoopRef);
 

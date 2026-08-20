@@ -178,7 +178,7 @@ pub fn start_device_listening<R: Runtime>(app_handle: AppHandle<R>) -> Result<()
                 let failure = move |err| {
                     mark_listener_runtime_failed(
                         &failure_app_handle,
-                        format!("Device listener callback failed: {err:?}"),
+                        format!("Device listener stopped: {err:?}"),
                     );
                 };
                 catch_unwind(AssertUnwindSafe(|| {

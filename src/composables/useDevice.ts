@@ -49,6 +49,10 @@ interface DeviceListenerStatus {
 type DeviceEvent = MouseButtonEvent | MouseMoveEvent | KeyboardEvent
 
 const DAMPING_DECAY = 0.75
+const DEVICE_RETRY_BASE_DELAY = 500
+const DEVICE_RETRY_MAX_DELAY = 8000
+const DEVICE_RETRY_MAX_ATTEMPTS = 6
+const DEVICE_READY_STABILITY_DELAY = 10000
 const appWindow = getCurrentWebviewWindow()
 
 export function useDevice() {
@@ -63,6 +67,38 @@ export function useDevice() {
   const scaleFactor = ref(1)
   const { handlePress, handleRelease, handleMouseChange, handleMouseMove } = useModel()
   let unmounted = false
+  let lifecycleGeneration = 0
+  let listenerState: DeviceListenerStatus['state'] = 'unavailable'
+  let retryAttempt = 0
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let readyResetTimer: ReturnType<typeof setTimeout> | undefined
+  let permissionPollTimer: ReturnType<typeof setTimeout> | undefined
+  let permissionPollResolve: (() => void) | undefined
+  let listenerStart: Promise<void> | undefined
+  let permissionFlow: Promise<boolean> | undefined
+  let permissionPromptRequested = false
+
+  const clearRetryTimer = () => {
+    if (!retryTimer) return
+
+    clearTimeout(retryTimer)
+    retryTimer = void 0
+  }
+
+  const clearReadyResetTimer = () => {
+    if (!readyResetTimer) return
+
+    clearTimeout(readyResetTimer)
+    readyResetTimer = void 0
+  }
+
+  const clearPermissionPollTimer = () => {
+    if (permissionPollTimer) clearTimeout(permissionPollTimer)
+
+    permissionPollTimer = void 0
+    permissionPollResolve?.()
+    permissionPollResolve = void 0
+  }
 
   const clearReleaseTimers = () => {
     for (const timer of releaseTimers.values()) clearTimeout(timer)
@@ -124,6 +160,10 @@ export function useDevice() {
 
   onUnmounted(() => {
     unmounted = true
+    ++lifecycleGeneration
+    clearRetryTimer()
+    clearReadyResetTimer()
+    clearPermissionPollTimer()
     releaseInputState()
     modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
     Ticker.shared.remove(tickerCallback)
@@ -149,12 +189,45 @@ export function useDevice() {
     return Ticker.shared.add(tickerCallback)
   }, { immediate: true })
 
+  const waitForPermissionPoll = () => new Promise<void>((resolve) => {
+    permissionPollResolve = resolve
+    permissionPollTimer = setTimeout(() => {
+      permissionPollTimer = void 0
+      permissionPollResolve = void 0
+      resolve()
+    }, 1000)
+  })
+
   const waitForInputMonitoringPermission = async () => {
     for (;;) {
       if (unmounted) return false
       if (await checkInputMonitoringPermission()) return true
 
-      await new Promise<void>(resolve => setTimeout(resolve, 1000))
+      await waitForPermissionPoll()
+    }
+  }
+
+  const ensureInputMonitoringPermission = async () => {
+    if (!isMac) return true
+    if (permissionFlow) return permissionFlow
+
+    const nextPermissionFlow = (async () => {
+      if (await checkInputMonitoringPermission()) return true
+
+      if (!permissionPromptRequested) {
+        await requestInputMonitoringPermission()
+        permissionPromptRequested = true
+      }
+
+      return waitForInputMonitoringPermission()
+    })()
+
+    permissionFlow = nextPermissionFlow
+
+    try {
+      return await nextPermissionFlow
+    } finally {
+      if (permissionFlow === nextPermissionFlow) permissionFlow = void 0
     }
   }
 
@@ -296,7 +369,28 @@ export function useDevice() {
   const deviceStatusListenerReady = useTauriListen<DeviceListenerStatus>(
     LISTEN_KEY.DEVICE_LISTENER_STATUS,
     ({ payload }) => {
-      if (payload.state === 'unavailable') releaseInputState()
+      listenerState = payload.state
+
+      if (payload.state === 'unavailable') {
+        clearReadyResetTimer()
+        releaseInputState()
+        scheduleListenerRestart()
+      } else {
+        clearRetryTimer()
+
+        if (payload.state === 'ready') {
+          clearReadyResetTimer()
+
+          const generation = lifecycleGeneration
+          readyResetTimer = setTimeout(() => {
+            readyResetTimer = void 0
+
+            if (!unmounted && generation === lifecycleGeneration && listenerState === 'ready') {
+              retryAttempt = 0
+            }
+          }, DEVICE_READY_STABILITY_DELAY)
+        }
+      }
 
       modelRuntime.updatePetRuntimeContext({ inputStatus: payload.state })
 
@@ -309,34 +403,81 @@ export function useDevice() {
     },
   )
 
-  const startListening = async () => {
-    modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+  function scheduleListenerRestart() {
+    if (unmounted || retryTimer || retryAttempt >= DEVICE_RETRY_MAX_ATTEMPTS) return
 
-    try {
-      await Promise.all([deviceListenerReady, deviceStatusListenerReady])
+    const generation = lifecycleGeneration
+    const delay = Math.min(
+      DEVICE_RETRY_BASE_DELAY * 2 ** retryAttempt,
+      DEVICE_RETRY_MAX_DELAY,
+    )
 
-      if (unmounted) return
+    ++retryAttempt
+    retryTimer = setTimeout(() => {
+      retryTimer = void 0
 
-      if (isMac && !await checkInputMonitoringPermission()) {
-        await requestInputMonitoringPermission()
-
-        if (!await waitForInputMonitoringPermission()) return
+      if (unmounted || generation !== lifecycleGeneration || listenerState !== 'unavailable') {
+        return
       }
 
-      if (unmounted) return
+      if (listenerStart) {
+        --retryAttempt
+        scheduleListenerRestart()
 
-      await invoke(INVOKE_KEY.START_DEVICE_LISTENING)
-    } catch (reason) {
-      releaseInputState()
-      modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+        return
+      }
 
-      const message = reason instanceof Error ? reason.message : String(reason)
+      void requestListenerStart()
+    }, delay)
+  }
 
-      console.error('Failed to start device listening:', reason)
-      void error(`Failed to start device listening: ${message}`).catch((logReason) => {
-        console.error('Failed to write device listening error log:', logReason)
-      })
+  async function requestListenerStart() {
+    if (unmounted) return
+    if (listenerStart) return listenerStart
+
+    const generation = lifecycleGeneration
+    const nextListenerStart = (async () => {
+      try {
+        await Promise.all([deviceListenerReady, deviceStatusListenerReady])
+
+        if (unmounted || generation !== lifecycleGeneration) return
+
+        if (!await ensureInputMonitoringPermission()) return
+
+        if (unmounted || generation !== lifecycleGeneration) return
+
+        await invoke(INVOKE_KEY.START_DEVICE_LISTENING)
+      } catch (reason) {
+        if (unmounted || generation !== lifecycleGeneration) return
+
+        listenerState = 'unavailable'
+        releaseInputState()
+        modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+
+        const message = reason instanceof Error ? reason.message : String(reason)
+
+        console.error('Failed to start device listening:', reason)
+        void error(`Failed to start device listening: ${message}`).catch((logReason) => {
+          console.error('Failed to write device listening error log:', logReason)
+        })
+
+        scheduleListenerRestart()
+      }
+    })()
+
+    listenerStart = nextListenerStart
+
+    try {
+      await nextListenerStart
+    } finally {
+      if (listenerStart === nextListenerStart) listenerStart = void 0
     }
+  }
+
+  const startListening = () => {
+    modelRuntime.updatePetRuntimeContext({ inputStatus: 'unavailable' })
+
+    return requestListenerStart()
   }
 
   return {
