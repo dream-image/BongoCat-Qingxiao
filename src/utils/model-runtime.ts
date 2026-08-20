@@ -14,6 +14,7 @@ class ModelRuntime {
   private loadGeneration = 0
   private petExitGeneration = 0
   private pendingSpriteBinding: string | undefined
+  private readonly activeKeyboardInputs = new Set<string>()
   private readonly pressedSpriteBindings = new Set<string>()
   private readonly petBehavior = new PetBehaviorController(void 0, {
     driver: {
@@ -46,6 +47,7 @@ class ModelRuntime {
 
     sprite.setMirrored(this.mirrored)
     this.petBehavior.configure(result.petBehavior, result.defaultAnimation)
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs)
     this.petBehavior.start()
 
     return result
@@ -88,7 +90,20 @@ class ModelRuntime {
     return live2d.setParameterValue(id, value)
   }
 
-  public handleKeyboard(key: string, pressed: boolean, label?: string | null) {
+  public handleKeyboard(
+    key: string,
+    pressed: boolean,
+    label?: string | null,
+    trackInput = true,
+  ) {
+    if (trackInput) {
+      if (pressed) {
+        this.activeKeyboardInputs.add(key)
+      } else {
+        this.activeKeyboardInputs.delete(key)
+      }
+    }
+
     if (this.renderer !== 'sprite') return
 
     if (!this.petBehavior.hasConfig) {
@@ -97,6 +112,8 @@ class ModelRuntime {
 
     if (!pressed) {
       this.pressedSpriteBindings.delete(key)
+
+      if (trackInput) this.petBehavior.notifyKeyboardRelease(key)
 
       return sprite.handleKeyboardBinding(key, false, !this.petBehavior.isPetActive)
     }
@@ -109,7 +126,7 @@ class ModelRuntime {
     }
 
     const bubbleShown = sprite.showKeyboardBubble(key, label ?? void 0)
-    const exitingPet = this.petBehavior.notifyKeyboardPress()
+    const exitingPet = this.petBehavior.notifyKeyboardPress(key)
 
     if (!exitingPet) {
       return sprite.handleKeyboardBinding(key, true) || bubbleShown
@@ -137,6 +154,8 @@ class ModelRuntime {
   }
 
   public updatePetRuntimeContext(context: Partial<PetBehaviorRuntimeContext>) {
+    if (context.inputStatus === 'unavailable') this.activeKeyboardInputs.clear()
+
     if (context.enabled === false
       || context.visible === false
       || context.inputStatus === 'unavailable') {
@@ -188,6 +207,7 @@ class ModelRuntime {
   private destroyRenderers() {
     this.petBehavior.stop()
     this.petBehavior.configure()
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs)
     this.petExitGeneration++
     this.pendingSpriteBinding = void 0
     this.pressedSpriteBindings.clear()

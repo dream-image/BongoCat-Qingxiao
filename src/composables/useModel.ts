@@ -196,15 +196,15 @@ export function useModel() {
       return value.includes(dirName)
     })
 
-    if (prevKey) {
-      handleRelease(prevKey)
+    if (prevKey && prevKey !== key) {
+      handleRelease(prevKey, false)
     }
 
     modelStore.pressedKeys[key] = path
   }
 
-  const handleRelease = (key: string) => {
-    modelRuntime.handleKeyboard(key, false)
+  const handleRelease = (key: string, trackInput = true) => {
+    modelRuntime.handleKeyboard(key, false, void 0, trackInput)
 
     delete modelStore.pressedKeys[key]
   }

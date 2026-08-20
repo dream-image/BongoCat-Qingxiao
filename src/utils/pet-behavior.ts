@@ -191,6 +191,7 @@ export class PetBehaviorController {
   private destroyed = false
   private lastAutonomousAction: string | undefined
   private readonly cooldowns = new Map<string, number>()
+  private readonly activeKeyboardInputs = new Set<string>()
   private exitingPromise: Promise<boolean> | null = null
 
   public constructor(config: PetBehaviorConfig | undefined, dependencies: PetBehaviorDependencies) {
@@ -225,6 +226,7 @@ export class PetBehaviorController {
     this.behaviorConfig = config
     this.defaultAnimation = defaultAnimation
     this.cooldowns.clear()
+    this.activeKeyboardInputs.clear()
     this.lastAutonomousAction = void 0
     this.exitingPromise = null
     this.setState('work-idle')
@@ -252,6 +254,7 @@ export class PetBehaviorController {
 
     this.started = false
     this.invalidate()
+    this.activeKeyboardInputs.clear()
     this.exitingPromise = null
 
     if (shouldRestore) {
@@ -276,6 +279,7 @@ export class PetBehaviorController {
     this.behaviorConfig = void 0
     this.defaultAnimation = void 0
     this.cooldowns.clear()
+    this.activeKeyboardInputs.clear()
     this.exitingPromise = null
     this.setState('work-idle')
   }
@@ -290,7 +294,11 @@ export class PetBehaviorController {
 
     if (patch.enabled !== void 0) this.context.enabled = patch.enabled
     if (patch.visible !== void 0) this.context.visible = patch.visible
-    if (patch.inputStatus !== void 0) this.context.inputStatus = patch.inputStatus
+    if (patch.inputStatus !== void 0) {
+      this.context.inputStatus = patch.inputStatus
+
+      if (patch.inputStatus === 'unavailable') this.activeKeyboardInputs.clear()
+    }
     if (patch.mouseInteractions !== void 0) {
       this.context.mouseInteractions = patch.mouseInteractions
     }
@@ -326,20 +334,67 @@ export class PetBehaviorController {
     }
   }
 
-  public notifyKeyboardPress() {
-    if (!this.behaviorConfig || !this.started || this.destroyed) return false
+  public syncActiveKeyboardInputs(inputs: Iterable<string>) {
+    if (this.destroyed) return
 
-    this.clearActivationTimer()
+    const nextInputs = new Set(inputs)
 
-    if (!this.canRun()) return false
+    if (nextInputs.size === this.activeKeyboardInputs.size
+      && [...nextInputs].every(key => this.activeKeyboardInputs.has(key))) {
+      return
+    }
 
-    if (this.currentState === 'work-idle') {
+    const hadActiveInputs = this.activeKeyboardInputs.size > 0
+
+    this.activeKeyboardInputs.clear()
+
+    for (const key of nextInputs) this.activeKeyboardInputs.add(key)
+
+    if (this.activeKeyboardInputs.size > 0) {
+      this.clearActivationTimer()
+
+      if (this.currentState !== 'work-idle' && this.canRunWithoutKeyboardInput()) {
+        void this.exitForInput()
+      }
+
+      return
+    }
+
+    if (hadActiveInputs && this.currentState === 'work-idle' && this.canRun()) {
       this.scheduleActivation()
+    }
+  }
 
+  public notifyKeyboardPress(key: string) {
+    if (this.destroyed) return false
+
+    const isFirstPress = !this.activeKeyboardInputs.has(key)
+
+    if (isFirstPress) {
+      this.activeKeyboardInputs.add(key)
+
+      if (this.activeKeyboardInputs.size === 1) this.clearActivationTimer()
+    }
+
+    if (!this.behaviorConfig || !this.started || !this.canRunWithoutKeyboardInput()) return false
+
+    if (this.currentState === 'work-idle') return false
+
+    if (isFirstPress) void this.exitForInput()
+
+    return true
+  }
+
+  public notifyKeyboardRelease(key: string) {
+    if (this.destroyed || !this.activeKeyboardInputs.delete(key)) return false
+
+    if (this.activeKeyboardInputs.size > 0
+      || this.currentState !== 'work-idle'
+      || !this.canRun()) {
       return false
     }
 
-    void this.exitForInput()
+    this.scheduleActivation()
 
     return true
   }
@@ -473,6 +528,10 @@ export class PetBehaviorController {
   }
 
   private canRun() {
+    return this.canRunWithoutKeyboardInput() && this.activeKeyboardInputs.size === 0
+  }
+
+  private canRunWithoutKeyboardInput() {
     return Boolean(
       this.behaviorConfig
       && this.started
