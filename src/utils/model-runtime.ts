@@ -14,7 +14,7 @@ class ModelRuntime {
   private loadGeneration = 0
   private petExitGeneration = 0
   private pendingSpriteBinding: string | undefined
-  private readonly activeKeyboardInputs = new Set<string>()
+  private readonly activeKeyboardInputs = new Map<string, string | undefined>()
   private readonly pressedSpriteBindings = new Set<string>()
   private readonly petBehavior = new PetBehaviorController(void 0, {
     driver: {
@@ -47,7 +47,7 @@ class ModelRuntime {
 
     sprite.setMirrored(this.mirrored)
     this.petBehavior.configure(result.petBehavior, result.defaultAnimation)
-    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs)
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
     this.petBehavior.start()
 
     return result
@@ -95,53 +95,135 @@ class ModelRuntime {
     pressed: boolean,
     label?: string | null,
     trackInput = true,
+    inputId = key,
   ) {
+    let renderKey = key
+    let shouldReleaseRenderState = true
+
     if (trackInput) {
       if (pressed) {
-        this.activeKeyboardInputs.add(key)
+        const activeRenderKey = this.activeKeyboardInputs.get(inputId)
+
+        if (activeRenderKey !== void 0) {
+          renderKey = activeRenderKey
+        } else {
+          this.activeKeyboardInputs.set(inputId, renderKey)
+        }
       } else {
-        this.activeKeyboardInputs.delete(key)
+        renderKey = this.activeKeyboardInputs.get(inputId) ?? renderKey
+        this.activeKeyboardInputs.delete(inputId)
+        shouldReleaseRenderState = ![...this.activeKeyboardInputs.values()]
+          .includes(renderKey)
       }
     }
 
-    if (this.renderer !== 'sprite') return
+    const result = {
+      key: renderKey,
+      renderStateChanged: pressed || shouldReleaseRenderState,
+    }
+
+    if (this.renderer !== 'sprite') return result
 
     if (!this.petBehavior.hasConfig) {
-      return sprite.handleKeyboard(key, pressed, label ?? void 0)
+      if (!pressed && !shouldReleaseRenderState) return result
+
+      sprite.handleKeyboard(renderKey, pressed, label ?? void 0)
+
+      return result
     }
 
     if (!pressed) {
-      this.pressedSpriteBindings.delete(key)
+      if (trackInput) this.petBehavior.notifyKeyboardRelease(inputId)
 
-      if (trackInput) this.petBehavior.notifyKeyboardRelease(key)
+      if (!shouldReleaseRenderState) return result
 
-      return sprite.handleKeyboardBinding(key, false, !this.petBehavior.isPetActive)
+      this.pressedSpriteBindings.delete(renderKey)
+      sprite.handleKeyboardBinding(renderKey, false, !this.petBehavior.isPetActive)
+
+      return result
     }
 
-    const hasBinding = sprite.hasKeyboardBinding(key)
+    const hasBinding = sprite.hasKeyboardBinding(renderKey)
 
     if (hasBinding) {
-      this.pressedSpriteBindings.delete(key)
-      this.pressedSpriteBindings.add(key)
+      this.pressedSpriteBindings.delete(renderKey)
+      this.pressedSpriteBindings.add(renderKey)
     }
 
-    const bubbleShown = sprite.showKeyboardBubble(key, label ?? void 0)
-    const exitingPet = this.petBehavior.notifyKeyboardPress(key)
+    sprite.showKeyboardBubble(renderKey, label ?? void 0)
+    const exitingPet = this.petBehavior.notifyKeyboardPress(inputId)
 
     if (!exitingPet) {
-      return sprite.handleKeyboardBinding(key, true) || bubbleShown
+      sprite.handleKeyboardBinding(renderKey, true)
+
+      return result
     }
 
     if (hasBinding) {
-      this.pendingSpriteBinding = key
-      sprite.markKeyboardBindingPressed(key)
+      this.pendingSpriteBinding = renderKey
+      sprite.markKeyboardBindingPressed(renderKey)
     }
 
     const generation = ++this.petExitGeneration
 
     void this.playPendingBindingAfterPetExit(generation)
 
-    return true
+    return result
+  }
+
+  public setKeyboardInputActive(inputId: string, active: boolean) {
+    if (active) {
+      if (!this.activeKeyboardInputs.has(inputId)) {
+        this.activeKeyboardInputs.set(inputId, void 0)
+      }
+    } else {
+      this.activeKeyboardInputs.delete(inputId)
+    }
+
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
+  }
+
+  public suspendKeyboardInputRendering(inputIds: Iterable<string>) {
+    for (const inputId of inputIds) {
+      this.activeKeyboardInputs.set(inputId, void 0)
+    }
+
+    this.clearKeyboardRenderState()
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
+
+    if (this.renderer === 'sprite') sprite.syncPressedKeyboardBindings([])
+  }
+
+  public remapKeyboardInputs(inputs: Iterable<{ inputId: string, renderKey: string }>) {
+    this.clearKeyboardRenderState()
+
+    for (const { inputId, renderKey } of inputs) {
+      this.activeKeyboardInputs.set(inputId, renderKey)
+    }
+
+    const activeRenderKeys = this.getActiveRenderKeys()
+
+    for (const renderKey of activeRenderKeys) {
+      if (this.renderer === 'sprite' && sprite.hasKeyboardBinding(renderKey)) {
+        this.pressedSpriteBindings.add(renderKey)
+      }
+    }
+
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
+
+    if (this.renderer !== 'sprite') return activeRenderKeys
+
+    sprite.syncPressedKeyboardBindings([...this.pressedSpriteBindings])
+
+    if (!this.petBehavior.isPetActive) sprite.resumePressedInputBinding()
+
+    return activeRenderKeys
+  }
+
+  public getActiveRenderKeys() {
+    return [...new Set(this.activeKeyboardInputs.values())].flatMap((renderKey) => {
+      return renderKey ? [renderKey] : []
+    })
   }
 
   public handleMouse(button: string, pressed: boolean) {
@@ -154,8 +236,6 @@ class ModelRuntime {
   }
 
   public updatePetRuntimeContext(context: Partial<PetBehaviorRuntimeContext>) {
-    if (context.inputStatus === 'unavailable') this.activeKeyboardInputs.clear()
-
     if (context.enabled === false
       || context.visible === false
       || context.rendererReady === false
@@ -166,6 +246,10 @@ class ModelRuntime {
     }
 
     this.petBehavior.updateContext(context)
+
+    if (context.inputStatus !== void 0) {
+      this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
+    }
   }
 
   public hitTestPetPointer(point: PetPoint) {
@@ -210,12 +294,16 @@ class ModelRuntime {
     this.petBehavior.updateContext({ rendererReady: false })
     this.petBehavior.stop()
     this.petBehavior.configure()
-    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs)
+    this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
+    this.clearKeyboardRenderState()
+    live2d.destroy()
+    sprite.destroy()
+  }
+
+  private clearKeyboardRenderState() {
     this.petExitGeneration++
     this.pendingSpriteBinding = void 0
     this.pressedSpriteBindings.clear()
-    live2d.destroy()
-    sprite.destroy()
   }
 
   private async playPendingBindingAfterPetExit(generation: number) {

@@ -28,6 +28,11 @@ export interface CursorPoint {
   y: number
 }
 
+interface PressedKeyboardInput {
+  code: string
+  renderKey?: string
+}
+
 interface MouseMoveEvent {
   kind: 'MouseMove'
   value: CursorPoint
@@ -60,14 +65,20 @@ const appWindow = getCurrentWebviewWindow()
 export function useDevice() {
   const modelStore = useModelStore()
   const releaseTimers = new Map<string, NodeJS.Timeout>()
-  const pressedKeyboardKeys = new Set<string>()
+  const pressedKeyboardInputs = new Map<string, PressedKeyboardInput>()
   const pressedMouseButtons = new Set<string>()
   const appStore = useAppStore()
   const catStore = useCatStore()
   const latestCursorPoint = ref<CursorPoint>()
   const smoothedCursorPoint = ref<CursorPoint>()
   const scaleFactor = ref(1)
-  const { handlePress, handleRelease, handleMouseChange, handleMouseMove } = useModel()
+  const {
+    handlePress,
+    handleRelease,
+    syncPressedRenderKeys,
+    handleMouseChange,
+    handleMouseMove,
+  } = useModel()
   let unmounted = false
   let lifecycleGeneration = 0
   let listenerState: DeviceListenerStatus['state'] = 'unavailable'
@@ -116,21 +127,30 @@ export function useDevice() {
     releaseTimers.clear()
   }
 
-  const releaseInputState = () => {
-    clearReleaseTimers()
-
-    const keyboardKeys = new Set([
-      ...pressedKeyboardKeys,
-      ...Object.keys(modelStore.pressedKeys),
-    ])
-
-    pressedKeyboardKeys.clear()
-
-    for (const key of keyboardKeys) handleRelease(key)
-
+  const releaseMouseInputState = () => {
     for (const button of pressedMouseButtons) handleMouseChange(button, false)
 
     pressedMouseButtons.clear()
+  }
+
+  const releaseInputState = () => {
+    clearReleaseTimers()
+
+    const keyboardInputs = [...pressedKeyboardInputs.entries()]
+
+    pressedKeyboardInputs.clear()
+
+    for (const [inputId, { renderKey }] of keyboardInputs) {
+      if (renderKey) {
+        handleRelease(renderKey, true, inputId)
+      } else {
+        modelRuntime.setKeyboardInputActive(inputId, false)
+      }
+    }
+
+    syncPressedRenderKeys(modelRuntime.getActiveRenderKeys())
+
+    releaseMouseInputState()
   }
 
   const tickerCallback = (ticker: Ticker) => {
@@ -196,26 +216,6 @@ export function useDevice() {
     })
     Ticker.shared.remove(tickerCallback)
   })
-
-  watch(() => modelStore.currentModel, () => {
-    clearReleaseTimers()
-    pressedKeyboardKeys.clear()
-    pressedMouseButtons.clear()
-  })
-
-  watch(() => catStore.model.ignoreMouse, (value) => {
-    if (value) {
-      for (const button of pressedMouseButtons) {
-        handleMouseChange(button, false)
-      }
-
-      pressedMouseButtons.clear()
-
-      return Ticker.shared.remove(tickerCallback)
-    }
-
-    return Ticker.shared.add(tickerCallback)
-  }, { immediate: true })
 
   const waitForPermissionPoll = () => new Promise<void>((resolve) => {
     permissionPollResolve = resolve
@@ -386,6 +386,24 @@ export function useDevice() {
     setHoverHidden(false)
   }
 
+  watch(() => catStore.model.ignoreMouse, (value) => {
+    if (value) {
+      latestCursorPoint.value = void 0
+      smoothedCursorPoint.value = void 0
+      resetHideOnHover()
+
+      for (const button of pressedMouseButtons) {
+        handleMouseChange(button, false)
+      }
+
+      pressedMouseButtons.clear()
+
+      return Ticker.shared.remove(tickerCallback)
+    }
+
+    return Ticker.shared.add(tickerCallback)
+  }, { immediate: true })
+
   const onHideOnHover = (x: number, y: number) => {
     const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
 
@@ -457,6 +475,8 @@ export function useDevice() {
   })
 
   const handleCursorMove = async (cursorPoint: CursorPoint) => {
+    if (catStore.model.ignoreMouse) return
+
     const x = cursorPoint.x * scaleFactor.value
     const y = cursorPoint.y * scaleFactor.value
 
@@ -467,22 +487,100 @@ export function useDevice() {
     onHideOnHover(x, y)
   }
 
-  const handleAutoRelease = (key: string, delay = 100, label?: string | null) => {
-    pressedKeyboardKeys.add(key)
-    handlePress(key, label)
-
-    if (releaseTimers.has(key)) {
-      clearTimeout(releaseTimers.get(key))
+  const prepareModelTransition = () => {
+    for (const input of pressedKeyboardInputs.values()) {
+      input.renderKey = void 0
     }
 
-    const timer = setTimeout(() => {
-      pressedKeyboardKeys.delete(key)
-      handleRelease(key)
+    modelRuntime.suspendKeyboardInputRendering(pressedKeyboardInputs.keys())
+    releaseMouseInputState()
+  }
 
-      releaseTimers.delete(key)
+  const remapPressedKeyboardInputs = () => {
+    const mappings: Array<{ inputId: string, renderKey: string }> = []
+
+    for (const [inputId, input] of pressedKeyboardInputs) {
+      const renderKey = getSupportedKey(input.code)
+
+      input.renderKey = renderKey
+      mappings.push({ inputId, renderKey })
+    }
+
+    const activeRenderKeys = modelRuntime.remapKeyboardInputs(mappings)
+
+    syncPressedRenderKeys(activeRenderKeys)
+  }
+
+  const releaseKeyboardInput = (inputId: string) => {
+    const timer = releaseTimers.get(inputId)
+
+    if (timer) clearTimeout(timer)
+
+    releaseTimers.delete(inputId)
+
+    const renderKey = pressedKeyboardInputs.get(inputId)?.renderKey
+
+    pressedKeyboardInputs.delete(inputId)
+
+    if (renderKey) {
+      handleRelease(renderKey, true, inputId)
+    } else {
+      modelRuntime.setKeyboardInputActive(inputId, false)
+    }
+
+    syncPressedRenderKeys(modelRuntime.getActiveRenderKeys())
+  }
+
+  const handleKeyboardPress = (
+    inputId: string,
+    code: string,
+    label?: string | null,
+  ) => {
+    const activeInput = pressedKeyboardInputs.get(inputId)
+    const renderKey = activeInput?.renderKey ?? getSupportedKey(code)
+
+    pressedKeyboardInputs.delete(inputId)
+    pressedKeyboardInputs.set(inputId, { code, renderKey })
+    handlePress(renderKey, label, inputId)
+
+    return renderKey
+  }
+
+  const registerKeyboardPress = (
+    inputId: string,
+    code: string,
+    label?: string | null,
+  ) => {
+    if (modelStore.modelReady) return handleKeyboardPress(inputId, code, label)
+
+    const activeInput = pressedKeyboardInputs.get(inputId)
+
+    pressedKeyboardInputs.set(inputId, {
+      code,
+      renderKey: activeInput?.renderKey,
+    })
+    modelRuntime.setKeyboardInputActive(inputId, true)
+  }
+
+  const handleAutoRelease = (
+    inputId: string,
+    code: string,
+    delay = 100,
+    label?: string | null,
+  ) => {
+    registerKeyboardPress(inputId, code, label)
+
+    const previousTimer = releaseTimers.get(inputId)
+
+    if (previousTimer) clearTimeout(previousTimer)
+
+    const timer = setTimeout(() => {
+      if (releaseTimers.get(inputId) !== timer) return
+
+      releaseKeyboardInput(inputId)
     }, delay)
 
-    releaseTimers.set(key, timer)
+    releaseTimers.set(inputId, timer)
   }
 
   const deviceListenerReady = useTauriListen<DeviceEvent>(LISTEN_KEY.DEVICE_CHANGED, ({ payload }) => {
@@ -491,29 +589,21 @@ export function useDevice() {
     if (kind === 'KeyboardPress' || kind === 'KeyboardRelease') {
       const code = typeof value === 'string' ? value : value.code
       const label = typeof value === 'string' ? void 0 : value.label
-      const nextValue = getSupportedKey(code)
-
-      if (!nextValue) return
-
-      if (nextValue === 'CapsLock') {
-        return handleAutoRelease(nextValue)
+      if (code === 'CapsLock') {
+        return handleAutoRelease(code, code)
       }
 
       if (kind === 'KeyboardPress') {
         if (isWindows) {
           const delay = catStore.model.autoReleaseDelay * 1000
 
-          return handleAutoRelease(nextValue, delay, label)
+          return handleAutoRelease(code, code, delay, label)
         }
 
-        pressedKeyboardKeys.add(nextValue)
-
-        return handlePress(nextValue, label)
+        return registerKeyboardPress(code, code, label)
       }
 
-      pressedKeyboardKeys.delete(nextValue)
-
-      return handleRelease(nextValue)
+      return releaseKeyboardInput(code)
     }
 
     switch (kind) {
@@ -530,6 +620,8 @@ export function useDevice() {
 
         return handleMouseChange(value, false)
       case 'MouseMove':
+        if (catStore.model.ignoreMouse) return
+
         return latestCursorPoint.value = value
     }
   })
@@ -650,5 +742,7 @@ export function useDevice() {
 
   return {
     startListening,
+    prepareModelTransition,
+    remapPressedKeyboardInputs,
   }
 }

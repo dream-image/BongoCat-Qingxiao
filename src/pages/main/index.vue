@@ -29,7 +29,7 @@ import { join } from '@/utils/path'
 import { isWindows } from '@/utils/platform'
 import { clearObject } from '@/utils/shared'
 
-const { startListening } = useDevice()
+const { startListening, prepareModelTransition, remapPressedKeyboardInputs } = useDevice()
 const appWindow = getCurrentWebviewWindow()
 const { modelSize, handleLoad, handleDestroy, handleResize, handleKeyChange } = useModel()
 const petPointer = usePetPointer(
@@ -80,6 +80,7 @@ watch(() => modelStore.currentModel, async (model) => {
 
   ++resizeGeneration
   resizing.value = false
+  prepareModelTransition()
   petPointer.reset()
   modelStore.modelReady = false
   modelRuntime.updatePetRuntimeContext({ rendererReady: false })
@@ -132,6 +133,7 @@ watch(() => modelStore.currentModel, async (model) => {
   backgroundImagePath.value = nextBackgroundImagePath
   clearObject([modelStore.supportKeys])
   Object.assign(modelStore.supportKeys, nextSupportKeys)
+  remapPressedKeyboardInputs()
   modelStore.modelReady = true
 
   if (!resizing.value) {

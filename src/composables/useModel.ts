@@ -186,10 +186,8 @@ export function useModel() {
     return true
   }
 
-  const handlePress = (key: string, label?: string | null) => {
-    modelRuntime.handleKeyboard(key, true, label)
-
-    const path = modelStore.supportKeys[key]
+  const setPressedRenderKey = (renderKey: string) => {
+    const path = modelStore.supportKeys[renderKey]
 
     if (!path) return
 
@@ -198,17 +196,35 @@ export function useModel() {
       return value.includes(dirName)
     })
 
-    if (prevKey && prevKey !== key) {
-      handleRelease(prevKey, false)
-    }
+    if (prevKey && prevKey !== renderKey) delete modelStore.pressedKeys[prevKey]
 
-    modelStore.pressedKeys[key] = path
+    modelStore.pressedKeys[renderKey] = path
   }
 
-  const handleRelease = (key: string, trackInput = true) => {
-    modelRuntime.handleKeyboard(key, false, void 0, trackInput)
+  const handlePress = (key: string, label?: string | null, inputId = key) => {
+    const { key: renderKey } = modelRuntime.handleKeyboard(key, true, label, true, inputId)
 
-    delete modelStore.pressedKeys[key]
+    setPressedRenderKey(renderKey)
+  }
+
+  const syncPressedRenderKeys = (renderKeys: Iterable<string>) => {
+    for (const key of Object.keys(modelStore.pressedKeys)) {
+      delete modelStore.pressedKeys[key]
+    }
+
+    for (const renderKey of renderKeys) setPressedRenderKey(renderKey)
+  }
+
+  const handleRelease = (key: string, trackInput = true, inputId = key) => {
+    const result = modelRuntime.handleKeyboard(key, false, void 0, trackInput, inputId)
+
+    if (!trackInput) {
+      if (result.renderStateChanged) delete modelStore.pressedKeys[result.key]
+
+      return
+    }
+
+    syncPressedRenderKeys(modelRuntime.getActiveRenderKeys())
   }
 
   function handleKeyChange(isLeft = true, pressed = true) {
@@ -290,6 +306,7 @@ export function useModel() {
     modelSize,
     handlePress,
     handleRelease,
+    syncPressedRenderKeys,
     handleLoad,
     handleDestroy,
     handleResize,
