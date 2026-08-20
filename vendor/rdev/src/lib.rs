@@ -311,7 +311,18 @@ pub use crate::rdev::UnicodeInfo;
 ///     }
 /// }
 /// ```
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(target_os = "macos")]
+pub fn listen<T>(callback: T) -> Result<(), ListenError>
+where
+    T: FnMut(Event) + Send + 'static,
+{
+    _listen(callback)
+}
+
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 pub fn listen<T>(callback: T) -> Result<(), ListenError>
 where
     T: FnMut(Event) + 'static,
@@ -319,7 +330,19 @@ where
     _listen(callback)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(target_os = "macos")]
+pub fn listen_with_ready<T, R>(callback: T, ready: R) -> Result<(), ListenError>
+where
+    T: FnMut(Event) + Send + 'static,
+    R: FnOnce() + 'static,
+{
+    _listen_with_ready(callback, ready)
+}
+
+#[cfg(all(
+    not(target_os = "macos"),
+    not(any(target_os = "android", target_os = "ios"))
+))]
 pub fn listen_with_ready<T, R>(callback: T, ready: R) -> Result<(), ListenError>
 where
     T: FnMut(Event) + 'static,
@@ -335,7 +358,7 @@ pub fn listen_with_ready_and_error<T, R, F>(
     failure: F,
 ) -> Result<(), ListenError>
 where
-    T: FnMut(Event) + 'static,
+    T: FnMut(Event) + Send + 'static,
     R: FnOnce() + 'static,
     F: FnOnce(ListenError) + Send + 'static,
 {

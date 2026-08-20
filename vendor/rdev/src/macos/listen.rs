@@ -11,7 +11,7 @@ use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Mutex;
 
-static mut GLOBAL_CALLBACK: Option<Box<dyn FnMut(Event)>> = None;
+static mut GLOBAL_CALLBACK: Option<Box<dyn FnMut(Event) + Send>> = None;
 static mut GLOBAL_FAILURE_CALLBACK: Option<Box<dyn FnOnce(ListenError) + Send>> = None;
 static mut EVENT_TAP: CFMachPortRef = null();
 static mut EVENT_SOURCE: CFRunLoopSourceRef = null_mut();
@@ -240,14 +240,14 @@ unsafe fn release_listener_resources_async(
 
 pub fn listen<T>(callback: T) -> Result<(), ListenError>
 where
-    T: FnMut(Event) + 'static,
+    T: FnMut(Event) + Send + 'static,
 {
     listen_with_ready_and_error(callback, || {}, |_| {})
 }
 
 pub fn listen_with_ready<T, R>(callback: T, ready: R) -> Result<(), ListenError>
 where
-    T: FnMut(Event) + 'static,
+    T: FnMut(Event) + Send + 'static,
     R: FnOnce() + 'static,
 {
     listen_with_ready_and_error(callback, ready, |_| {})
@@ -259,7 +259,7 @@ pub fn listen_with_ready_and_error<T, R, F>(
     failure: F,
 ) -> Result<(), ListenError>
 where
-    T: FnMut(Event) + 'static,
+    T: FnMut(Event) + Send + 'static,
     R: FnOnce() + 'static,
     F: FnOnce(ListenError) + Send + 'static,
 {
