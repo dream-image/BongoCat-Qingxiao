@@ -18,7 +18,6 @@ import { PetPassiveTriggerEngine } from './pet-behavior-passive'
 import {
   delayUntilNextScheduleScan,
   findDuePetScheduleOccurrence,
-  PET_MAX_SCHEDULE_CATCH_UP_MS,
 } from './pet-behavior-scheduler'
 
 // 宠物行为只负责“何时进入/退出、选择哪个动作”，不直接依赖 Canvas、Tauri 或 Pinia。
@@ -286,24 +285,16 @@ const defaultContext: PetBehaviorRuntimeContext = {
 export const PET_MAX_TAP_DISTANCE = 6
 // 浏览器 setTimeout 超过 32 位有符号整数会溢出或被钳制，模型配置必须在入库前拒绝该值。
 const PET_MAX_TIMER_DELAY = 2_147_483_647
-// 运行时还可能接收缓存或程序直接组装的 normalized config，因此这里必须与 module loader
-// 保持同一预算，不能把资源上限只押在文件加载入口上。
-const PET_MAX_MODULES = 64
 const PET_MAX_MODULE_ACTIONS = 128
 const PET_MAX_MODULE_TRIGGERS = 256
 const PET_MAX_TOTAL_MODULE_ACTIONS = 512
 const PET_MAX_TOTAL_MODULE_TRIGGERS = 256
-const PET_MIN_TIMER_DRIVEN_CATCH_UP_MS = 1_000
 const PET_MAX_PENDING_PASSIVE_OCCURRENCES = 256
-const PET_MAX_DIALOGUE_LINES = 32
 const PET_MAX_LOCALIZED_VARIANTS = 16
-const PET_MAX_ID_LENGTH = 80
 const PET_MAX_TEXT_LENGTH = 240
 // 内部合成模组使用外部 safe-id 永远无法表达的前缀，从根上避免导入模块覆盖兼容配置。
 const PET_LEGACY_MODULE_ID = '@legacy'
-const PET_SAFE_ID_PATTERN = /^[\da-z][\w.-]*$/
 const PET_LOCALE_PATTERN = /^[a-z]{2,3}(?:-[a-z\d]{2,8})*$/i
-const PET_RESERVED_IDS = new Set(['__proto__', 'prototype', 'constructor'])
 
 export class PetBehaviorController {
   private behaviorConfig: PetBehaviorConfig | undefined
@@ -2292,10 +2283,8 @@ export function assertPetBehaviorConfig(
   }
 
   if (value.modules !== void 0) {
-    assertRuntimeModules(
+    assertRuntimeModuleGraph(
       value.modules,
-      context,
-      hitAreaIds,
       semanticBindings,
       legacyActionCount,
       legacyTriggerCount,
@@ -2303,591 +2292,55 @@ export function assertPetBehaviorConfig(
   }
 }
 
-function assertRuntimeModules(
+function assertRuntimeModuleGraph(
   value: unknown,
-  context: PetBehaviorValidationContext,
-  hitAreaIds: Set<string>,
   semanticBindings: Set<string>,
   initialActionCount: number,
   initialTriggerCount: number,
 ) {
   if (!Array.isArray(value)) throw new TypeError('Pet behavior modules must be an array')
-  if (value.length > PET_MAX_MODULES) {
-    throw new RangeError(`Pet behavior modules cannot exceed ${PET_MAX_MODULES}`)
-  }
 
-  const moduleIds = new Set<string>()
-  const actionIds = new Set<string>()
-  const triggerIds = new Set<string>()
   let totalActions = initialActionCount
   let totalTriggers = initialTriggerCount
 
-  for (const [moduleIndex, module] of value.entries()) {
-    const moduleLabel = `Pet behavior modules[${moduleIndex}]`
+  for (const [moduleIndex, candidate] of value.entries()) {
+    const label = `Pet behavior modules[${moduleIndex}]`
 
-    // module.json 虽已在读取层规范化，合并后的对象仍属于模型输入；这里二次校验可阻止
-    // 类型断言、缓存或未来合并逻辑把不完整运行时图送进状态机。
-    assertRecord(module, moduleLabel)
-    assertAllowedKeys(module, ['id', 'displayName', 'order', 'actions', 'triggers'], moduleLabel)
-    assertSafeId(module.id, `${moduleLabel}.id`)
+    assertRecord(candidate, label)
 
-    if (moduleIds.has(module.id)) throw new TypeError(`${moduleLabel}.id must be unique`)
-
-    moduleIds.add(module.id)
-    assertLocalizedText(module.displayName, `${moduleLabel}.displayName`)
-    assertBoundedInteger(module.order, -10_000, 10_000, `${moduleLabel}.order`)
-
-    if (!Array.isArray(module.actions) || module.actions.length === 0) {
-      throw new TypeError(`${moduleLabel}.actions must be a non-empty array`)
-    }
-    if (module.actions.length > PET_MAX_MODULE_ACTIONS) {
-      throw new RangeError(`${moduleLabel}.actions cannot exceed ${PET_MAX_MODULE_ACTIONS}`)
+    if (!Array.isArray(candidate.actions) || !Array.isArray(candidate.triggers)) {
+      throw new TypeError(`${label} must be a normalized runtime module`)
     }
 
-    totalActions += module.actions.length
+    totalActions += candidate.actions.length
+    totalTriggers += candidate.triggers.length
 
     if (totalActions > PET_MAX_TOTAL_MODULE_ACTIONS) {
       throw new RangeError(
         `Pet behavior module actions cannot exceed ${PET_MAX_TOTAL_MODULE_ACTIONS}`,
       )
     }
-
-    const ownActionIds = new Set<string>()
-
-    for (const [actionIndex, action] of module.actions.entries()) {
-      const actionLabel = `${moduleLabel}.actions[${actionIndex}]`
-
-      assertRecord(action, actionLabel)
-      assertAllowedKeys(
-        action,
-        [
-          'id',
-          'moduleId',
-          'label',
-          'animation',
-          'priority',
-          'cooldownMs',
-          'interruptible',
-          'dialogue',
-        ],
-        actionLabel,
-      )
-      assertQualifiedId(action.id, module.id, `${actionLabel}.id`)
-
-      if (actionIds.has(action.id)) throw new TypeError(`${actionLabel}.id must be globally unique`)
-
-      actionIds.add(action.id)
-      ownActionIds.add(action.id)
-
-      if (action.moduleId !== module.id) {
-        throw new TypeError(`${actionLabel}.moduleId must match its parent module`)
-      }
-      if (action.label !== void 0) assertLocalizedText(action.label, `${actionLabel}.label`)
-      if (action.animation !== void 0) {
-        assertNonEmptyString(action.animation, `${actionLabel}.animation`)
-        assertAnimation(action.animation, false, context, `${actionLabel}.animation`)
-      }
-
-      assertBoundedInteger(action.priority, 0, 99, `${actionLabel}.priority`)
-      assertNonNegativeTimerDelay(action.cooldownMs, `${actionLabel}.cooldownMs`)
-      assertBoolean(action.interruptible, `${actionLabel}.interruptible`)
-
-      if (action.dialogue !== void 0) {
-        assertRecord(action.dialogue, `${actionLabel}.dialogue`)
-        assertRuntimeDialogue(action.dialogue, context.canvas, `${actionLabel}.dialogue`)
-      }
-      if (action.animation === void 0 && action.dialogue === void 0) {
-        throw new TypeError(`${actionLabel} must define animation or dialogue`)
-      }
-    }
-
-    if (!Array.isArray(module.triggers) || module.triggers.length === 0) {
-      throw new TypeError(`${moduleLabel}.triggers must be a non-empty array`)
-    }
-    if (module.triggers.length > PET_MAX_MODULE_TRIGGERS) {
-      throw new RangeError(`${moduleLabel}.triggers cannot exceed ${PET_MAX_MODULE_TRIGGERS}`)
-    }
-
-    totalTriggers += module.triggers.length
-
-    // 运行时二次镜像 loader 总预算，避免未来缓存/合并路径绕过外部 manifest 校验。
     if (totalTriggers > PET_MAX_TOTAL_MODULE_TRIGGERS) {
       throw new RangeError(
         `Pet behavior module triggers cannot exceed ${PET_MAX_TOTAL_MODULE_TRIGGERS}`,
       )
     }
 
-    for (const [triggerIndex, trigger] of module.triggers.entries()) {
-      const triggerLabel = `${moduleLabel}.triggers[${triggerIndex}]`
-
-      assertRecord(trigger, triggerLabel)
-      assertQualifiedId(trigger.id, module.id, `${triggerLabel}.id`)
-
-      if (triggerIds.has(trigger.id)) throw new TypeError(`${triggerLabel}.id must be globally unique`)
-      if (trigger.moduleId !== module.id) {
-        throw new TypeError(`${triggerLabel}.moduleId must match its parent module`)
+    for (const trigger of candidate.triggers) {
+      assertRecord(trigger, `${label}.triggers`)
+      if (trigger.type !== 'pointer') continue
+      if (typeof trigger.event !== 'string' || typeof trigger.area !== 'string') {
+        throw new TypeError(`${label} contains an invalid pointer trigger`)
       }
 
-      triggerIds.add(trigger.id)
-      assertRuntimeTrigger(
-        trigger,
-        triggerLabel,
-        ownActionIds,
-        hitAreaIds,
-        semanticBindings,
-      )
-    }
-  }
-}
+      const semanticBinding = `${trigger.event}:${trigger.area}`
 
-function assertRuntimeDialogue(
-  value: Record<string, unknown>,
-  canvas: PetBehaviorValidationContext['canvas'],
-  label: string,
-) {
-  assertAllowedKeys(value, ['chance', 'delayMs', 'durationMs', 'anchor', 'lines'], label)
-  assertPositiveNumber(value.chance, `${label}.chance`)
-
-  if (value.chance > 1) throw new RangeError(`${label}.chance cannot exceed 1`)
-
-  assertNonNegativeTimerDelay(value.delayMs, `${label}.delayMs`)
-  assertPositiveTimerDelay(value.durationMs, `${label}.durationMs`)
-
-  if (value.anchor !== void 0) {
-    const anchorLabel = `${label}.anchor`
-
-    assertRecord(value.anchor, anchorLabel)
-    assertAllowedKeys(value.anchor, ['x', 'y'], anchorLabel)
-    assertNonNegativeNumber(value.anchor.x, `${anchorLabel}.x`)
-    assertNonNegativeNumber(value.anchor.y, `${anchorLabel}.y`)
-
-    if (value.anchor.x > canvas.width || value.anchor.y > canvas.height) {
-      throw new RangeError(`${anchorLabel} exceeds the model canvas`)
-    }
-  }
-
-  if (!Array.isArray(value.lines) || value.lines.length === 0) {
-    throw new TypeError(`${label}.lines must be a non-empty array`)
-  }
-  if (value.lines.length > PET_MAX_DIALOGUE_LINES) {
-    throw new RangeError(`${label}.lines cannot exceed ${PET_MAX_DIALOGUE_LINES}`)
-  }
-
-  let totalWeight = 0
-
-  for (const [index, line] of value.lines.entries()) {
-    const lineLabel = `${label}.lines[${index}]`
-
-    assertRecord(line, lineLabel)
-    assertAllowedKeys(line, ['text', 'weight'], lineLabel)
-    assertLocalizedText(line.text, `${lineLabel}.text`)
-    assertPositiveNumber(line.weight, `${lineLabel}.weight`)
-    totalWeight += line.weight
-  }
-
-  if (!Number.isFinite(totalWeight)) {
-    throw new RangeError(`${label}.line weights must have a finite total`)
-  }
-}
-
-function assertRuntimeTrigger(
-  trigger: Record<string, unknown>,
-  label: string,
-  actionIds: Set<string>,
-  hitAreaIds: Set<string>,
-  semanticBindings: Set<string>,
-) {
-  if (trigger.type === 'interval') {
-    assertAllowedKeys(trigger, ['id', 'moduleId', 'type', 'delayMs', 'choices'], label)
-    assertTimerRange(trigger.delayMs, `${label}.delayMs`)
-
-    if (!Array.isArray(trigger.choices) || trigger.choices.length === 0) {
-      throw new TypeError(`${label}.choices must be a non-empty array`)
-    }
-    if (trigger.choices.length > PET_MAX_MODULE_ACTIONS) {
-      throw new RangeError(`${label}.choices cannot exceed ${PET_MAX_MODULE_ACTIONS}`)
-    }
-
-    const choiceIds = new Set<string>()
-    let totalWeight = 0
-
-    for (const [index, choice] of trigger.choices.entries()) {
-      const choiceLabel = `${label}.choices[${index}]`
-
-      assertRecord(choice, choiceLabel)
-      assertAllowedKeys(choice, ['actionId', 'weight'], choiceLabel)
-      assertActionReference(choice.actionId, actionIds, `${choiceLabel}.actionId`)
-
-      if (choiceIds.has(choice.actionId)) {
-        throw new TypeError(`${choiceLabel}.actionId must be unique`)
+      if (semanticBindings.has(semanticBinding)) {
+        throw new TypeError(`${label} duplicates the ${semanticBinding} interaction`)
       }
 
-      choiceIds.add(choice.actionId)
-      assertPositiveNumber(choice.weight, `${choiceLabel}.weight`)
-      totalWeight += choice.weight
+      semanticBindings.add(semanticBinding)
     }
-
-    if (!Number.isFinite(totalWeight)) {
-      throw new RangeError(`${label}.choice weights must have a finite total`)
-    }
-
-    return
-  }
-
-  if (trigger.type === 'idle') {
-    assertAllowedKeys(
-      trigger,
-      ['id', 'moduleId', 'type', 'afterMs', 'repeatMs', 'actionId', 'oncePerIdle'],
-      label,
-    )
-    assertPositiveTimerDelay(trigger.afterMs, `${label}.afterMs`)
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertBoolean(trigger.oncePerIdle, `${label}.oncePerIdle`)
-
-    if (trigger.repeatMs !== void 0) assertTimerRange(trigger.repeatMs, `${label}.repeatMs`)
-    if (trigger.oncePerIdle && trigger.repeatMs !== void 0) {
-      throw new TypeError(`${label} cannot combine oncePerIdle with repeatMs`)
-    }
-    if (!trigger.oncePerIdle && trigger.repeatMs === void 0) {
-      throw new TypeError(`${label} requires repeatMs when oncePerIdle is false`)
-    }
-
-    return
-  }
-
-  if (trigger.type === 'schedule') {
-    assertAllowedKeys(
-      trigger,
-      ['id', 'moduleId', 'type', 'actionId', 'time', 'dates', 'weekdays', 'catchUpMs', 'enterPet'],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertNonEmptyString(trigger.time, `${label}.time`)
-
-    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(trigger.time)) {
-      throw new TypeError(`${label}.time must use HH:mm in local time`)
-    }
-
-    assertRuntimeDates(trigger.dates, `${label}.dates`)
-    assertRuntimeWeekdays(trigger.weekdays, `${label}.weekdays`)
-    assertBoundedNumber(
-      trigger.catchUpMs,
-      0,
-      PET_MAX_SCHEDULE_CATCH_UP_MS,
-      `${label}.catchUpMs`,
-    )
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'session') {
-    assertAllowedKeys(
-      trigger,
-      ['id', 'moduleId', 'type', 'actionId', 'event', 'delayMs', 'catchUpMs', 'enterPet'],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    if (trigger.event !== 'startup') throw new TypeError(`${label}.event must be startup`)
-    assertTimerRange(trigger.delayMs, `${label}.delayMs`)
-    assertBoundedNumber(
-      trigger.catchUpMs,
-      PET_MIN_TIMER_DRIVEN_CATCH_UP_MS,
-      PET_MAX_SCHEDULE_CATCH_UP_MS,
-      `${label}.catchUpMs`,
-    )
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'visibility-return') {
-    assertAllowedKeys(
-      trigger,
-      [
-        'id',
-        'moduleId',
-        'type',
-        'actionId',
-        'minAwayMs',
-        'maxAwayMs',
-        'settleMs',
-        'catchUpMs',
-        'enterPet',
-      ],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertPositiveTimerDelay(trigger.minAwayMs, `${label}.minAwayMs`)
-    if (trigger.maxAwayMs !== void 0) {
-      assertPositiveTimerDelay(trigger.maxAwayMs, `${label}.maxAwayMs`)
-      if (trigger.maxAwayMs <= trigger.minAwayMs) {
-        throw new RangeError(`${label}.maxAwayMs must be greater than minAwayMs`)
-      }
-    }
-    assertNonNegativeTimerDelay(trigger.settleMs, `${label}.settleMs`)
-    assertBoundedNumber(
-      trigger.catchUpMs,
-      PET_MIN_TIMER_DRIVEN_CATCH_UP_MS,
-      PET_MAX_SCHEDULE_CATCH_UP_MS,
-      `${label}.catchUpMs`,
-    )
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'activity-burst') {
-    assertAllowedKeys(
-      trigger,
-      [
-        'id',
-        'moduleId',
-        'type',
-        'actionId',
-        'sources',
-        'windowMs',
-        'minimumEvents',
-        'quietMs',
-        'catchUpMs',
-        'enterPet',
-      ],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertRuntimeActivitySources(trigger.sources, `${label}.sources`)
-    assertPositiveTimerDelay(trigger.windowMs, `${label}.windowMs`)
-    assertBoundedInteger(trigger.minimumEvents, 2, 256, `${label}.minimumEvents`)
-    assertPositiveTimerDelay(trigger.quietMs, `${label}.quietMs`)
-    if (trigger.quietMs >= trigger.windowMs) {
-      throw new RangeError(`${label}.quietMs must be less than windowMs`)
-    }
-    assertBoundedNumber(
-      trigger.catchUpMs,
-      PET_MIN_TIMER_DRIVEN_CATCH_UP_MS,
-      PET_MAX_SCHEDULE_CATCH_UP_MS,
-      `${label}.catchUpMs`,
-    )
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'active-session') {
-    assertAllowedKeys(
-      trigger,
-      [
-        'id',
-        'moduleId',
-        'type',
-        'actionId',
-        'sources',
-        'afterMs',
-        'resetAfterMs',
-        'repeatMs',
-        'quietMs',
-        'catchUpMs',
-        'enterPet',
-      ],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertRuntimeActivitySources(trigger.sources, `${label}.sources`)
-    assertPositiveTimerDelay(trigger.afterMs, `${label}.afterMs`)
-    assertPositiveTimerDelay(trigger.resetAfterMs, `${label}.resetAfterMs`)
-    if (trigger.repeatMs !== void 0) {
-      assertPositiveTimerDelay(trigger.repeatMs, `${label}.repeatMs`)
-    }
-    assertPositiveTimerDelay(trigger.quietMs, `${label}.quietMs`)
-    if (trigger.quietMs >= trigger.resetAfterMs) {
-      throw new RangeError(`${label}.quietMs must be less than resetAfterMs`)
-    }
-    assertBoundedNumber(
-      trigger.catchUpMs,
-      PET_MIN_TIMER_DRIVEN_CATCH_UP_MS,
-      PET_MAX_SCHEDULE_CATCH_UP_MS,
-      `${label}.catchUpMs`,
-    )
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'daily-window') {
-    assertAllowedKeys(
-      trigger,
-      [
-        'id',
-        'moduleId',
-        'type',
-        'actionId',
-        'startTime',
-        'endTime',
-        'dates',
-        'weekdays',
-        'catchUpMs',
-        'enterPet',
-      ],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertNonEmptyString(trigger.startTime, `${label}.startTime`)
-    assertNonEmptyString(trigger.endTime, `${label}.endTime`)
-    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(trigger.startTime)
-      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(trigger.endTime)) {
-      throw new TypeError(`${label} times must use HH:mm in local time`)
-    }
-    if (trigger.startTime === trigger.endTime) {
-      throw new RangeError(`${label}.startTime and endTime must be different`)
-    }
-    assertRuntimeDates(trigger.dates, `${label}.dates`)
-    assertRuntimeWeekdays(trigger.weekdays, `${label}.weekdays`)
-    assertNonNegativeTimerDelay(trigger.catchUpMs, `${label}.catchUpMs`)
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'manual') {
-    assertAllowedKeys(
-      trigger,
-      ['id', 'moduleId', 'type', 'actionId', 'label', 'group', 'order', 'enterPet'],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-    assertLocalizedText(trigger.label, `${label}.label`)
-    if (trigger.group !== void 0) assertLocalizedText(trigger.group, `${label}.group`)
-    assertBoundedInteger(trigger.order, -10_000, 10_000, `${label}.order`)
-    assertBoolean(trigger.enterPet, `${label}.enterPet`)
-
-    return
-  }
-
-  if (trigger.type === 'pointer') {
-    assertAllowedKeys(
-      trigger,
-      ['id', 'moduleId', 'type', 'actionId', 'event', 'area', 'holdMs', 'distance', 'windowMs'],
-      label,
-    )
-    assertActionReference(trigger.actionId, actionIds, `${label}.actionId`)
-
-    if (trigger.event !== 'hover' && trigger.event !== 'tap' && trigger.event !== 'stroke') {
-      throw new TypeError(`${label}.event must be hover, tap, or stroke`)
-    }
-
-    assertNonEmptyString(trigger.area, `${label}.area`)
-    if (!hitAreaIds.has(trigger.area)) {
-      throw new TypeError(`${label}.area references an unknown hit area`)
-    }
-
-    const semanticBinding = `${trigger.event}:${trigger.area}`
-
-    if (semanticBindings.has(semanticBinding)) {
-      throw new TypeError(`${label} duplicates the ${semanticBinding} interaction`)
-    }
-
-    semanticBindings.add(semanticBinding)
-
-    if (trigger.holdMs !== void 0) {
-      assertPositiveTimerDelay(trigger.holdMs, `${label}.holdMs`)
-    }
-    if (trigger.distance !== void 0) {
-      assertPositiveNumber(trigger.distance, `${label}.distance`)
-    }
-    if (trigger.windowMs !== void 0) {
-      assertPositiveTimerDelay(trigger.windowMs, `${label}.windowMs`)
-    }
-
-    if (trigger.event === 'hover'
-      && (trigger.distance !== void 0 || trigger.windowMs !== void 0)) {
-      throw new TypeError(`${label} hover does not support distance or windowMs`)
-    }
-    if (trigger.event === 'stroke' && trigger.holdMs !== void 0) {
-      throw new TypeError(`${label} stroke does not support holdMs`)
-    }
-    if (trigger.event === 'tap'
-      && trigger.distance !== void 0
-      && trigger.distance > PET_MAX_TAP_DISTANCE) {
-      throw new RangeError(`${label}.distance cannot exceed ${PET_MAX_TAP_DISTANCE}`)
-    }
-    if (trigger.event === 'tap'
-      && trigger.holdMs !== void 0
-      && trigger.windowMs !== void 0
-      && trigger.holdMs >= trigger.windowMs) {
-      throw new RangeError(`${label}.holdMs must be less than windowMs`)
-    }
-
-    return
-  }
-
-  throw new TypeError(`${label}.type is unsupported`)
-}
-
-function assertRuntimeActivitySources(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 3) {
-    throw new TypeError(`${label} must contain between one and three sources`)
-  }
-
-  const sources = new Set<string>()
-
-  for (const source of value) {
-    if (source !== 'keyboard' && source !== 'mouse' && source !== 'gamepad') {
-      throw new TypeError(`${label} only supports keyboard, mouse, and gamepad`)
-    }
-    if (sources.has(source)) throw new TypeError(`${label} cannot contain duplicates`)
-    sources.add(source)
-  }
-}
-
-function assertRuntimeDates(value: unknown, label: string) {
-  if (value === void 0) return
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new TypeError(`${label} must be a non-empty array`)
-  }
-  if (value.length > 366) throw new RangeError(`${label} cannot exceed 366 dates`)
-
-  const dates = new Set<string>()
-
-  for (const [index, date] of value.entries()) {
-    const dateLabel = `${label}[${index}]`
-
-    assertNonEmptyString(date, dateLabel)
-
-    const match = /^(\d{4}|\*)-(\d{2})-(\d{2})$/.exec(date)
-
-    if (!match) throw new TypeError(`${dateLabel} must use YYYY-MM-DD or *-MM-DD`)
-
-    // 通配日期用闰年 2000 验证，允许合法的 *-02-29；实际触发仍按当前本地年份匹配。
-    const year = match[1] === '*' ? 2000 : Number(match[1])
-    const month = Number(match[2])
-    const day = Number(match[3])
-    const parsed = new Date(Date.UTC(year, month - 1, day))
-
-    if (parsed.getUTCFullYear() !== year
-      || parsed.getUTCMonth() !== month - 1
-      || parsed.getUTCDate() !== day) {
-      throw new RangeError(`${dateLabel} is not a real calendar date`)
-    }
-    if (dates.has(date)) throw new TypeError(`${label} cannot contain duplicates`)
-
-    dates.add(date)
-  }
-}
-
-function assertRuntimeWeekdays(value: unknown, label: string) {
-  if (value === void 0) return
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new TypeError(`${label} must be a non-empty array`)
-  }
-  if (value.length > 7) throw new RangeError(`${label} cannot exceed 7 weekdays`)
-
-  const weekdays = new Set<number>()
-
-  for (const [index, weekday] of value.entries()) {
-    assertBoundedInteger(weekday, 1, 7, `${label}[${index}]`)
-    if (weekdays.has(weekday)) throw new TypeError(`${label} cannot contain duplicates`)
-
-    weekdays.add(weekday)
   }
 }
 
@@ -2918,75 +2371,6 @@ function assertDisplayText(value: unknown, label: string): asserts value is stri
 
   if (value.length > PET_MAX_TEXT_LENGTH) {
     throw new RangeError(`${label} cannot exceed ${PET_MAX_TEXT_LENGTH} characters`)
-  }
-}
-
-function assertQualifiedId(value: unknown, moduleId: string, label: string): asserts value is string {
-  assertNonEmptyString(value, label)
-
-  const prefix = `${moduleId}/`
-
-  if (!value.startsWith(prefix)) throw new TypeError(`${label} must be qualified by its module`)
-
-  assertSafeId(value.slice(prefix.length), label)
-}
-
-function assertSafeId(value: unknown, label: string): asserts value is string {
-  assertNonEmptyString(value, label)
-
-  if (value.length > PET_MAX_ID_LENGTH
-    || value !== value.toLowerCase()
-    || !PET_SAFE_ID_PATTERN.test(value)
-    || PET_RESERVED_IDS.has(value.toLowerCase())) {
-    throw new TypeError(`${label} is not a safe identifier`)
-  }
-}
-
-function assertActionReference(
-  value: unknown,
-  actionIds: Set<string>,
-  label: string,
-): asserts value is string {
-  assertNonEmptyString(value, label)
-
-  if (!actionIds.has(value)) throw new TypeError(`${label} references an unknown action`)
-}
-
-function assertTimerRange(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length !== 2) {
-    throw new TypeError(`${label} must contain exactly two timer values`)
-  }
-
-  assertPositiveTimerDelay(value[0], `${label}[0]`)
-  assertPositiveTimerDelay(value[1], `${label}[1]`)
-
-  if (value[0] > value[1]) throw new RangeError(`${label} minimum cannot exceed maximum`)
-}
-
-function assertAllowedKeys(value: Record<string, unknown>, allowed: readonly string[], label: string) {
-  const allowedKeys = new Set(allowed)
-
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.has(key)) throw new TypeError(`${label}.${key} is not supported`)
-  }
-}
-
-function assertBoolean(value: unknown, label: string): asserts value is boolean {
-  if (typeof value !== 'boolean') throw new TypeError(`${label} must be a boolean`)
-}
-
-function assertBoundedInteger(value: unknown, minimum: number, maximum: number, label: string) {
-  if (!Number.isInteger(value) || (value as number) < minimum || (value as number) > maximum) {
-    throw new TypeError(`${label} must be an integer between ${minimum} and ${maximum}`)
-  }
-}
-
-function assertBoundedNumber(value: unknown, minimum: number, maximum: number, label: string) {
-  if (typeof value !== 'number'
-    || !Number.isFinite(value)
-    || value < minimum
-    || value > maximum) {
-    throw new TypeError(`${label} must be between ${minimum} and ${maximum}`)
   }
 }
 

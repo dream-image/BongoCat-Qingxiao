@@ -250,11 +250,18 @@ class SpriteRenderer {
     }
   }
 
-  public async validateModel(path: string) {
-    const { animations, config } = await this.readAndValidateModel(path)
+  public async validateModel(path: string, options: { decodeAssets?: boolean } = {}) {
+    if (options.decodeAssets) {
+      const { animations, config } = await this.readAndValidateModel(path)
 
-    // 校验入口仍实际解码全部资产，但返回配置前主动断开图片引用，避免批量导入时累计内存。
-    this.releaseLoadedAnimations(animations)
+      this.releaseLoadedAnimations(animations)
+
+      return config
+    }
+
+    const config = await this.readAndValidateConfig(path)
+
+    await this.validateAnimationResources(path, Object.entries(config.animations))
 
     return config
   }
@@ -1584,6 +1591,27 @@ class SpriteRenderer {
   }
 
   private async readAndValidateModel(path: string, generation?: number) {
+    const config = await this.readAndValidateConfig(path, generation)
+
+    const animations = await this.loadAndValidateAnimations(
+      path,
+      Object.entries(config.animations),
+      generation,
+    )
+
+    try {
+      this.assertLoadGeneration(generation)
+    } catch (error) {
+      // worker 全部成功后仍可能在 Promise 续体排队期间被新模型取代，旧图片也必须释放。
+      this.releaseLoadedAnimations(animations)
+
+      throw error
+    }
+
+    return { animations, config }
+  }
+
+  private async readAndValidateConfig(path: string, generation?: number) {
     this.assertLoadGeneration(generation)
 
     const configPath = await resolveModelResourcePath(path, 'model.json')
@@ -1607,22 +1635,32 @@ class SpriteRenderer {
     this.assertConfig(config)
     this.assertLoadGeneration(generation)
 
-    const animations = await this.loadAndValidateAnimations(
-      path,
-      Object.entries(config.animations),
-      generation,
-    )
+    return config
+  }
 
-    try {
+  private async validateAnimationResources(
+    modelPath: string,
+    entries: Array<[string, SpriteAnimationConfig]>,
+    generation?: number,
+  ) {
+    let totalPixels = 0
+
+    for (const [name, animation] of entries) {
       this.assertLoadGeneration(generation)
-    } catch (error) {
-      // worker 全部成功后仍可能在 Promise 续体排队期间被新模型取代，旧图片也必须释放。
-      this.releaseLoadedAnimations(animations)
 
-      throw error
+      const resolvedPath = await resolveModelResourcePath(modelPath, animation.file)
+      const dimensions = await this.readImageDimensions(resolvedPath)
+
+      totalPixels += this.assertSpritesheetBudget(name, dimensions)
+
+      if (totalPixels > MAX_TOTAL_SPRITESHEET_PIXELS) {
+        throw new RangeError(
+          `Sprite model exceeds the ${MAX_TOTAL_SPRITESHEET_PIXELS} total pixel budget`,
+        )
+      }
+
+      this.assertSpritesheet(name, animation, dimensions)
     }
-
-    return { animations, config }
   }
 
   private async loadAndValidateAnimations(

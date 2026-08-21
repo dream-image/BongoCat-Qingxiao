@@ -87,7 +87,7 @@
 ## 资源与导入边界
 
 - 模型 manifest 最大 1 MiB；单个 module manifest 最大 256 KiB。
-- 单模组最多 128 个 action / 256 个 trigger；外部模块与顶层兼容行为合并后，整个模型最多 512 个 action / 256 个 trigger，loader 和运行时二次校验同一预算。
+- 单模组最多 128 个 action / 256 个 trigger；外部模块由 loader 完整校验，和顶层兼容行为合并时只补充检查整个模型 512 个 action / 256 个 trigger 的总预算及跨模组指针冲突。
 - 模型最多 96 个动画；单张雪碧图最多 16 MiP；模型累计最多 64 MiP；图片最多四路并发加载。
 - 图片在创建 `HTMLImageElement` 前先有界读取文件头并占用像素预算，解码后再次核对实际尺寸。
 - 模型切换通过 generation 停止旧模块读取并主动取消旧图片加载。

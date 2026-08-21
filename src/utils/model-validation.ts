@@ -19,6 +19,7 @@ export interface ValidatedModelDirectory {
 }
 
 interface ValidateModelDirectoryOptions {
+  decodeSpriteAssets?: boolean
   spriteDefaultMode?: ValidatedModelMode
 }
 
@@ -56,7 +57,9 @@ export async function validateModelDirectory(
     }
 
     if (manifest.renderer === 'sprite') {
-      const validatedManifest = await sprite.validateModel(path)
+      const validatedManifest = await sprite.validateModel(path, {
+        decodeAssets: options.decodeSpriteAssets,
+      })
 
       return {
         renderer: 'sprite',

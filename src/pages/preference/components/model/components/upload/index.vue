@@ -90,18 +90,15 @@ watch(selectPaths, async (paths) => {
 
       try {
         const id = nanoid()
-        const detectedModel = await validateModelDirectory(fromPath)
 
         toPath = await invoke<string>(INVOKE_KEY.IMPORT_MODEL_DIRECTORY, {
           fromPath,
           modelId: id,
         })
 
-        const storedModel = await validateModelDirectory(toPath)
-
-        if (storedModel.renderer !== detectedModel.renderer) {
-          throw new Error('Model renderer changed while importing')
-        }
+        const storedModel = await validateModelDirectory(toPath, {
+          decodeSpriteAssets: true,
+        })
 
         await modelRegistryStore.registerCustomModel({
           id,

@@ -36,10 +36,15 @@ export function usePetActionMenu() {
       const activeGroups = session?.activeGroups.filter(group => group.actions.length > 0) ?? []
       const passiveGroups = session?.passiveGroups.filter(group => group.actions.length > 0) ?? []
       const items: PetActionMenuItem[] = []
-      const createActionItem = (action: typeof activeGroups[number]['actions'][number]) => {
+      const createActionItem = (
+        action: typeof activeGroups[number]['actions'][number],
+        groupLabel?: string,
+      ) => {
+        const actionLabel = action.label || action.id
+
         return {
           id: getPetActionMenuItemId(action.id),
-          text: action.label || action.id,
+          text: groupLabel ? `${groupLabel} · ${actionLabel}` : actionLabel,
           enabled: action.enabled,
           action: () => {
             if (session) modelRuntime.selectPetActionMenuAction(session.revision, action.id)
@@ -52,29 +57,19 @@ export function usePetActionMenu() {
           items.push({ item: 'Separator' })
         }
 
-        items.push({
-          id: getPetActionGroupId('active', groupIndex),
-          text: group.label || t('composables.usePetActionMenu.group'),
-          enabled: false,
-        })
+        const groupLabel = group.label || t('composables.usePetActionMenu.group')
 
-        items.push(...group.actions.map(createActionItem))
+        items.push(...group.actions.map(action => createActionItem(action, groupLabel)))
       }
 
       if (passiveGroups.length > 0) {
         if (items.length > 0) items.push({ item: 'Separator' })
 
-        items.push({
-          id: 'bongocat.pet-action.passive-title',
-          text: t('composables.usePetActionMenu.passive'),
-          enabled: false,
-        })
-
         for (const [groupIndex, group] of passiveGroups.entries()) {
           items.push({
             id: getPetActionGroupId('passive', group.id || groupIndex),
             text: group.label || t('composables.usePetActionMenu.passive'),
-            items: group.actions.map(createActionItem),
+            items: group.actions.map(action => createActionItem(action)),
           } satisfies SubmenuOptions)
         }
       }

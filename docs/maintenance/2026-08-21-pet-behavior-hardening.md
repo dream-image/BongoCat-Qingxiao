@@ -14,7 +14,7 @@
 核心结果如下：
 
 - 宠物形态不再与具体模型代码耦合；模型以后可以通过 `model.json` 的 `behaviors.pet` 声明进入、待机、自主行为、退出以及鼠标交互。
-- 当前内置模型 `src-tauri/assets/models/qingxiao/model.json` 尚未配置 `behaviors.pet`，因此当前只落了框架和运行链路，不会凭空触发现有模型没有提供的宠物动作。
+- 后续提交已为内置模型 `src-tauri/assets/models/qingxiao/model.json` 配置 `behaviors.pet` 和三个外部动作模组；当前实现详见 `2026-08-21-qingxiao-pet-action-modules.md`。
 - 原始物理输入身份 `inputId` 与当前模型使用的渲染键 `renderKey` 已分离。模型切换只暂停旧模型的视觉响应，不再伪造按键释放；新模型就绪后会重映射仍然按住的输入。
 - 键盘和手柄共享行为门禁，但使用不同来源的物理身份。手柄使用 `Gamepad:<name>`，避免与同名键盘键碰撞。
 - 宠物行为只有在输入监听可用、模型渲染完成、窗口实际可见，并且没有仍按住的键盘键或已追踪的手柄按钮/摇杆按键时才允许进入。
@@ -92,7 +92,7 @@ Sprite 模型可以在 `model.json` 中通过 `behaviors.pet` 提供 `PetBehavio
 | `hitAreas`           | `rect`、`ellipse` 或 `polygon` 命中区域 | 必须在模型画布内且几何参数有效                 |
 | `interactions`       | `hover`、`tap`、`stroke` 交互绑定       | 区域和动画必须存在，同一事件与区域不能重复绑定 |
 
-当前 `qingxiao` 配置没有 `behaviors.pet`。后续补动作时，应先提供与配置一致的进入、待机、退出和交互 Sprite；仅添加配置名但不添加动画会被加载校验拒绝。
+当前 `qingxiao` 已配置 `behaviors.pet`，并通过外部模块提供主动、被动和指针动作。配置引用的进入、待机、退出、交互 Sprite 仍会在模型导入和加载时统一校验。
 
 #### 3.2 状态机
 
