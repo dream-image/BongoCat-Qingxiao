@@ -188,6 +188,11 @@
         "quitApp": "退出应用"
       }
     },
+    "usePetActionMenu": {
+      "title": "宠物互动",
+      "group": "主动动作",
+      "unavailable": "当前没有可用动作"
+    },
     "useTray": {
       "checkUpdate": "检查更新",
       "openSource": "开源地址"

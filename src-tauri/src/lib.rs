@@ -11,7 +11,7 @@ use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_custom_window::{
     MAIN_WINDOW_LABEL, PREFERENCE_WINDOW_LABEL, show_preference_window,
 };
-use utils::fs_extra::copy_dir;
+use utils::fs_extra::{copy_dir, resolve_model_resource_path};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,6 +29,8 @@ pub fn run() {
         })
         .invoke_handler(generate_handler![
             copy_dir,
+            // 前端字符串检查无法识别 symlink/junction 越界，资源路径必须交给原生层 canonicalize 后裁决。
+            resolve_model_resource_path,
             start_device_listening,
             start_gamepad_listing,
             stop_gamepad_listing

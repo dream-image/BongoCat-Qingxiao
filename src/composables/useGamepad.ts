@@ -31,6 +31,9 @@ interface Sticks {
 }
 
 const INITIAL_STICK_STATE: StickState = { x: 0, y: 0, moved: false, pressed: false }
+// 进入阈值高于退出阈值形成 hysteresis，既过滤摇杆漂移，也能在真实回中时可靠释放活跃态。
+const STICK_ACTIVITY_ENTER_THRESHOLD = 0.18
+const STICK_ACTIVITY_EXIT_THRESHOLD = 0.10
 
 export function useGamepad() {
   const modelStore = useModelStore()
@@ -41,6 +44,7 @@ export function useGamepad() {
   })
   const pressedButtons = new Set<string>()
   const pressedThumbs = new Set<'LeftThumb' | 'RightThumb'>()
+  const stickAxisActive = { left: false, right: false }
   let gamepadModeActive = false
 
   const stickActive = computed(() => ({
@@ -60,6 +64,12 @@ export function useGamepad() {
     for (const name of pressedThumbs) {
       modelRuntime.setKeyboardInputActive(getInputId(name), false)
     }
+
+    // 轴向活跃是前端合成的 held 输入，设备停止监听时同样不会收到原生 release，必须显式收尾。
+    modelRuntime.setKeyboardInputActive(getInputId('LeftStickAxis'), false)
+    modelRuntime.setKeyboardInputActive(getInputId('RightStickAxis'), false)
+    stickAxisActive.left = false
+    stickAxisActive.right = false
 
     pressedButtons.clear()
     pressedThumbs.clear()
@@ -129,21 +139,42 @@ export function useGamepad() {
 
     const { name, value } = payload
 
+    const syncStickActivity = (side: 'left' | 'right') => {
+      const stick = sticks[side]
+      const magnitude = Math.hypot(stick.x, stick.y)
+      const nextActive = stickAxisActive[side]
+        ? magnitude > STICK_ACTIVITY_EXIT_THRESHOLD
+        : magnitude >= STICK_ACTIVITY_ENTER_THRESHOLD
+
+      // 摇杆回中会有小幅噪声；用双阈值滞回只上报 neutral↔active 边沿，避免永久卡在活跃态。
+      if (nextActive === stickAxisActive[side]) return
+
+      stickAxisActive[side] = nextActive
+      modelRuntime.setKeyboardInputActive(
+        getInputId(side === 'left' ? 'LeftStickAxis' : 'RightStickAxis'),
+        nextActive,
+      )
+    }
+
     switch (name) {
       case 'LeftStickX':
         sticks.left.x = value
+        syncStickActivity('left')
 
         return handleAxisChange('CatParamStickLX', value)
       case 'LeftStickY':
         sticks.left.y = value
+        syncStickActivity('left')
 
         return handleAxisChange('CatParamStickLY', value)
       case 'RightStickX':
         sticks.right.x = value
+        syncStickActivity('right')
 
         return handleAxisChange('CatParamStickRX', value)
       case 'RightStickY':
         sticks.right.y = value
+        syncStickActivity('right')
 
         return handleAxisChange('CatParamStickRY', value)
       case 'LeftThumb':

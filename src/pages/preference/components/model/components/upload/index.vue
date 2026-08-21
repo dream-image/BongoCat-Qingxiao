@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { appDataDir } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
-import { exists, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { exists, readDir } from '@tauri-apps/plugin-fs'
 import { message } from 'antdv-next'
 import { nanoid } from 'nanoid'
 import { onMounted, ref, useTemplateRef, watch } from 'vue'
@@ -13,8 +13,10 @@ import type { ModelMode, ModelRenderer } from '@/stores/model'
 
 import { INVOKE_KEY } from '@/constants'
 import { useModelStore } from '@/stores/model'
-import { join } from '@/utils/path'
+import { join, readBoundedTextFile } from '@/utils/path'
 import sprite from '@/utils/sprite'
+
+const MAX_MODEL_MANIFEST_BYTES = 1024 * 1024
 
 const dropRef = useTemplateRef('drop')
 const dragenter = ref(false)
@@ -69,7 +71,12 @@ watch(selectPaths, async (paths) => {
       const manifestPath = join(fromPath, 'model.json')
 
       if (await exists(manifestPath)) {
-        const content = await readTextFile(manifestPath)
+        // renderer 探测发生在 sprite.validateModel 之前，也必须共用 manifest 字节上限。
+        const content = await readBoundedTextFile(
+          manifestPath,
+          MAX_MODEL_MANIFEST_BYTES,
+          'Model manifest',
+        )
         let manifest: unknown
 
         try {

@@ -62,6 +62,9 @@ const DEVICE_RETRY_MAX_ATTEMPTS = 6
 const DEVICE_READY_STABILITY_DELAY = 10000
 const WINDOW_VISIBILITY_POLL_DELAY = 50
 const WINDOW_VISIBILITY_POLL_ATTEMPTS = 40
+// 鼠标移动只用于重置被动空闲计时；时间与距离双门槛避免原生高频事件持续轰击调度器。
+const MOUSE_ACTIVITY_SAMPLE_INTERVAL = 400
+const MOUSE_ACTIVITY_MIN_DISTANCE = 24
 const appWindow = getCurrentWebviewWindow()
 
 export function useDevice() {
@@ -98,6 +101,11 @@ export function useDevice() {
   let pointerInsideMainWindow = false
   let hoverHidden = false
   let actualWindowVisible = false
+  // 窗口 API 首次回读前不产生 presence 边沿，防止启动默认值被误判为一次离开/回来。
+  let actualWindowVisibilityKnown = false
+  let reportedPresenceVisible: boolean | undefined
+  let lastMouseActivityAt = Number.NEGATIVE_INFINITY
+  let lastMouseActivityPoint: CursorPoint | undefined
   let windowVisibilityGeneration = 0
   let unlistenWindowClose = () => {}
   let desiredIgnoreCursorEvents = false
@@ -186,6 +194,8 @@ export function useDevice() {
 
   onMounted(async () => {
     // 初始化读取真实窗口状态，不能仅相信持久化的 visible 配置。
+    document.addEventListener('visibilitychange', syncDocumentVisibility)
+    syncDocumentVisibility()
     void reconcileWindowVisibility()
 
     const nextUnlistenWindowClose = await appWindow.onCloseRequested(() => {
@@ -214,6 +224,7 @@ export function useDevice() {
     ++lifecycleGeneration
     ++windowVisibilityGeneration
     unlistenWindowClose()
+    document.removeEventListener('visibilitychange', syncDocumentVisibility)
     clearRetryTimer()
     clearReadyResetTimer()
     clearPermissionPollTimer()
@@ -305,6 +316,7 @@ export function useDevice() {
       renderedVisible: !unmounted
         && catStore.window.visible
         && actualWindowVisible
+        && document.visibilityState === 'visible'
         && !hoverHidden,
     })
   }
@@ -336,8 +348,29 @@ export function useDevice() {
     })
   }
 
+  const syncPetPresence = () => {
+    if (!actualWindowVisibilityKnown) return
+
+    const visible = actualWindowVisible && document.visibilityState === 'visible'
+
+    if (visible === reportedPresenceVisible) return
+
+    // Presence 只由真实窗口和 document 可见边沿组成；hover/resize/focus 不得伪造“久别归来”。
+    reportedPresenceVisible = visible
+    modelRuntime.setPetPresenceVisible(visible)
+  }
+
   const setActualWindowVisible = (visible: boolean) => {
     actualWindowVisible = visible
+    // 首次只建立 presence 基线；不能把初始默认 false 当成一次真实离开。
+    actualWindowVisibilityKnown = true
+    syncPetPresence()
+    syncRenderedVisibility()
+  }
+
+  const syncDocumentVisibility = () => {
+    // 锁屏/最小化可能只隐藏 WebView 而 Tauri 窗口仍报 visible，两个闸门必须同时更新。
+    syncPetPresence()
     syncRenderedVisibility()
   }
 
@@ -507,6 +540,27 @@ export function useDevice() {
     onHideOnHover(x, y)
   }
 
+  const reportMouseActivity = (cursorPoint: CursorPoint) => {
+    const now = performance.now()
+    const previous = lastMouseActivityPoint
+
+    if (now - lastMouseActivityAt < MOUSE_ACTIVITY_SAMPLE_INTERVAL) return
+    if (previous
+      && Math.hypot(cursorPoint.x - previous.x, cursorPoint.y - previous.y)
+      < MOUSE_ACTIVITY_MIN_DISTANCE) {
+      return
+    }
+
+    lastMouseActivityAt = now
+    lastMouseActivityPoint = cursorPoint
+    // 只上报经距离+时间节流的离散 pulse，不把高频坐标流传入行为引擎。
+    modelRuntime.notifyPetPassiveActivity({
+      inputId: 'Mouse:Move',
+      phase: 'pulse',
+      source: 'mouse',
+    })
+  }
+
   const prepareModelTransition = () => {
     // 模型切换只暂停视觉映射，保留真实按压账本，用户持续按键仍应阻止 idle 行为。
     for (const input of pressedKeyboardInputs.values()) {
@@ -647,6 +701,8 @@ export function useDevice() {
         return handleMouseChange(value, false)
       case 'MouseMove':
         if (catStore.model.ignoreMouse) return
+
+        reportMouseActivity(value)
 
         return latestCursorPoint.value = value
     }

@@ -1,5 +1,4 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { readTextFile } from '@tauri-apps/plugin-fs'
 
 import type {
   PetBehaviorConfig,
@@ -7,10 +6,17 @@ import type {
   PetPlaybackHandle,
   PetPlaybackResult,
   PetPlayOptions,
+  PetSpeechPayload,
 } from './pet-behavior'
+import type { PetBehaviorRuntimeModule } from './pet-behavior-module'
 
-import { join } from './path'
+import {
+  readBoundedTextFile,
+  readFilePrefix,
+  resolveModelResourcePath,
+} from './path'
 import { assertPetBehaviorConfig } from './pet-behavior'
+import { loadPetBehaviorModules } from './pet-behavior-module'
 
 export interface SpriteAnimationConfig {
   file: string
@@ -31,7 +37,9 @@ export interface SpriteBindingsConfig {
 }
 
 export interface SpriteBehaviorsConfig {
-  pet?: PetBehaviorConfig
+  pet?: PetBehaviorConfig & {
+    modules?: PetBehaviorRuntimeModule[]
+  }
 }
 
 export interface SpriteBubbleConfig {
@@ -88,7 +96,7 @@ export interface SpriteModelLoadResult {
   motions: Record<string, never[]>
   expressions: never[]
   defaultAnimation: string
-  petBehavior?: PetBehaviorConfig
+  petBehavior?: SpriteBehaviorsConfig['pet']
 }
 
 interface LoadedAnimation {
@@ -96,10 +104,36 @@ interface LoadedAnimation {
   image: HTMLImageElement
 }
 
+// 解码前的文件头尺寸与解码后的 DOM 尺寸使用同一结构，便于做两阶段一致性校验。
+interface SpriteImageDimensions {
+  width: number
+  height: number
+}
+
 interface ActiveBubble {
   text: string
   createdAt: number
   sequence: number
+}
+
+// 对白独立保存生命周期和模型坐标锚点，避免复用按键气泡队列后互相驱逐。
+interface ActiveSpeechBubble {
+  text: string
+  createdAt: number
+  durationMs: number
+  generation: number
+  anchor?: {
+    x: number
+    y: number
+  }
+}
+
+// 先产出稳定布局再绘制云朵，保证字体缩放、换行和外框预算使用同一组测量结果。
+interface SpeechTextLayout {
+  lines: string[]
+  fontSize: number
+  lineHeight: number
+  width: number
 }
 
 interface ActivePlayback {
@@ -113,6 +147,16 @@ interface PressedInput {
   kind: 'keyboard' | 'mouse'
   key: string
 }
+
+// 三层上限同时防 fan-out、单图解码峰值与总驻留；64 MiP 覆盖清宵当前 65,536,000 像素，同时保留硬边界。
+const MAX_ANIMATION_COUNT = 96
+const MAX_SPRITESHEET_PIXELS = 16 * 1024 * 1024
+const MAX_TOTAL_SPRITESHEET_PIXELS = 64 * 1024 * 1024
+// 并发数限制解码瞬时峰值；manifest 上限则在 JSON.parse 前约束不受信任文本的驻留量。
+const MAX_CONCURRENT_IMAGE_LOADS = 4
+const MAX_MODEL_MANIFEST_BYTES = 1024 * 1024
+// JPEG 的尺寸标记可能位于 EXIF/ICC 段之后；512 KiB 足够兼容正常图片，同时仍让探测内存有硬上限。
+const MAX_IMAGE_HEADER_BYTES = 512 * 1024
 
 const defaultBubbleConfig: SpriteBubbleConfig = {
   enabled: true,
@@ -146,6 +190,8 @@ class SpriteRenderer {
   private frameStartedAt = 0
   private animationFrameId: number | null = null
   private loadGeneration = 0
+  // 只登记运行时模型加载；validateModel 必须独立遍历完整资产，不能被模型切换提前取消。
+  private pendingImageLoads = new Map<number, Set<() => void>>()
   private maxFPS = 60
   private bindingIndexes = new Map<string, number>()
   private pressedKeyboard = new Map<string, string>()
@@ -155,6 +201,9 @@ class SpriteRenderer {
   private bubbles: ActiveBubble[] = []
   private bubbleConfig: SpriteBubbleConfig = { ...defaultBubbleConfig }
   private bubbleSequence = 0
+  // 对白使用独立单槽，避免主动/被动动作说话时挤占连续按键的冒泡队列。
+  private speechBubble: ActiveSpeechBubble | null = null
+  private speechGeneration = 0
   private lastRenderAt = Number.NEGATIVE_INFINITY
   private renderPending = false
   private mirrored = false
@@ -162,23 +211,34 @@ class SpriteRenderer {
   public async load(path: string): Promise<SpriteModelLoadResult> {
     const generation = ++this.loadGeneration
 
+    // 新模型开始时立即中止旧代次仍在解码的图片，避免只能等浏览器网络层自然失败。
+    this.abortPendingImageLoads(generation)
     this.reset()
 
-    const { animations, config } = await this.readAndValidateModel(path)
+    const { animations, config } = await this.readAndValidateModel(path, generation)
 
     // 图片解码是异步的；旧模型即使后完成也不能重新初始化共用 Canvas。
     if (generation !== this.loadGeneration) {
+      this.releaseLoadedAnimations(animations)
       throw new DOMException('Sprite model load was superseded', 'AbortError')
     }
 
-    this.initCanvas()
+    try {
+      this.initCanvas()
 
-    this.config = config
-    this.animations = new Map(animations)
-    this.bubbleConfig = { ...defaultBubbleConfig, ...config.bubbles }
+      this.config = config
+      this.animations = new Map(animations)
+      this.bubbleConfig = { ...defaultBubbleConfig, ...config.bubbles }
 
-    this.resizeModel(config.canvas)
-    this.play(config.defaultAnimation)
+      this.resizeModel(config.canvas)
+      this.play(config.defaultAnimation)
+    } catch (error) {
+      // 初始化任何一步失败都释放已解码图片并回到空状态，不能留下半套模型供 play 读取。
+      this.releaseLoadedAnimations(animations)
+      this.reset()
+
+      throw error
+    }
 
     return {
       width: config.canvas.width,
@@ -191,13 +251,17 @@ class SpriteRenderer {
   }
 
   public async validateModel(path: string) {
-    const { config } = await this.readAndValidateModel(path)
+    const { animations, config } = await this.readAndValidateModel(path)
+
+    // 校验入口仍实际解码全部资产，但返回配置前主动断开图片引用，避免批量导入时累计内存。
+    this.releaseLoadedAnimations(animations)
 
     return config
   }
 
   public destroy() {
     ++this.loadGeneration
+    this.abortPendingImageLoads()
     this.reset()
   }
 
@@ -298,6 +362,52 @@ class SpriteRenderer {
 
   public showKeyboardBubble(key: string, label?: string) {
     return this.showBubble(key, label)
+  }
+
+  public showSpeechBubble(payload: PetSpeechPayload) {
+    if (!this.canvas || !this.context || !this.config) return false
+
+    const text = payload.text.trim()
+
+    if (!text || !Number.isFinite(payload.durationMs) || payload.durationMs <= 0) return false
+
+    // 非有限锚点退回角色默认头部位置，不能让 NaN 扩散到 Canvas 变换并污染整帧。
+    const anchor = payload.anchor
+      && Number.isFinite(payload.anchor.x)
+      && Number.isFinite(payload.anchor.y)
+      ? { ...payload.anchor }
+      : undefined
+    const timestamp = performance.now()
+
+    // generation 让替换、清除和模型销毁后的旧对白立即失效，不会在下一帧重新出现。
+    this.speechBubble = {
+      text,
+      createdAt: timestamp,
+      durationMs: payload.durationMs,
+      generation: ++this.speechGeneration,
+      anchor,
+    }
+    this.renderPending = true
+    this.renderFrame(timestamp)
+    this.ensureAnimationFrame()
+
+    return true
+  }
+
+  public clearSpeechBubble() {
+    const hadSpeech = this.speechBubble !== null
+
+    ++this.speechGeneration
+    this.speechBubble = null
+
+    if (!hadSpeech) return false
+
+    // 不等下一次角色动画帧，动作被打断时要立即擦除已经显示的对白。
+    this.renderPending = true
+    this.renderFrame()
+    this.ensureAnimationFrame()
+
+    return true
   }
 
   public hasKeyboardBinding(key: string) {
@@ -491,9 +601,18 @@ class SpriteRenderer {
       return timestamp - bubble.createdAt < this.bubbleConfig.duration
     })
 
+    const currentSpeech = this.speechBubble
+    const speechExpired = Boolean(currentSpeech
+      && (currentSpeech.generation !== this.speechGeneration
+        || timestamp - currentSpeech.createdAt >= currentSpeech.durationMs))
+
+    if (speechExpired) {
+      this.speechBubble = null
+    }
+
     const animation = this.animations.get(this.activeAnimation)
 
-    this.renderPending ||= previousBubbleCount !== this.bubbles.length
+    this.renderPending ||= previousBubbleCount !== this.bubbles.length || speechExpired
 
     let animationFinishedNow = false
 
@@ -565,7 +684,12 @@ class SpriteRenderer {
       this.renderPending = true
     }
 
-    if (bubbleExpired || animationFinishedNow
+    if (this.speechBubble) {
+      // 对白自身有浮动、回弹和淡出，即使人物停在单帧也要持续请求绘制。
+      this.renderPending = true
+    }
+
+    if (bubbleExpired || speechExpired || animationFinishedNow
       || (this.renderPending && timestamp - this.lastRenderAt >= renderInterval)) {
       this.renderFrame(timestamp)
     }
@@ -640,6 +764,8 @@ class SpriteRenderer {
     }
 
     this.renderBubbles(timestamp)
+    // 对白绘制在按键气泡之上，但状态完全分离，彼此的过期和替换不会互相清理。
+    this.renderSpeechBubble(timestamp)
 
     this.lastRenderAt = timestamp
     this.renderPending = false
@@ -792,6 +918,140 @@ class SpriteRenderer {
       this.context.fillText(bubble.text, 0, -tailHeight - cloudHeight * 0.47)
       this.context.restore()
     }
+  }
+
+  private renderSpeechBubble(timestamp: number) {
+    const bubble = this.speechBubble
+
+    if (!this.canvas || !this.context || !this.config || !bubble) return
+    if (bubble.generation !== this.speechGeneration) return
+
+    const progress = (timestamp - bubble.createdAt) / bubble.durationMs
+
+    if (progress < 0 || progress >= 1) return
+
+    // 对白与人物共用 contain 变换，窗口缩放后尾巴仍指向模型内的同一语义位置。
+    const viewportScale = Math.min(
+      this.canvas.width / this.config.canvas.width,
+      this.canvas.height / this.config.canvas.height,
+    )
+    const modelOffsetX = (this.canvas.width - this.config.canvas.width * viewportScale) / 2
+    const modelOffsetY = (this.canvas.height - this.config.canvas.height * viewportScale) / 2
+    const configuredAnchorX = bubble.anchor?.x ?? this.config.canvas.width * 0.68
+    const configuredAnchorY = bubble.anchor?.y ?? this.config.canvas.height * 0.3
+    // 人物镜像时，对白的模型坐标也要镜像；否则尾巴会指向原位置而不是当前头部。
+    const logicalAnchorX = this.mirrored
+      ? this.config.canvas.width - configuredAnchorX
+      : configuredAnchorX
+    const anchorX = modelOffsetX
+      + Math.max(0, Math.min(this.config.canvas.width, logicalAnchorX)) * viewportScale
+    const anchorY = modelOffsetY
+      + Math.max(0, Math.min(this.config.canvas.height, configuredAnchorY)) * viewportScale
+    const margin = Math.max(
+      4,
+      (this.bubbleConfig.shadowBlur + Math.abs(this.bubbleConfig.shadowOffsetY)
+        + this.bubbleConfig.strokeWidth + 3) * viewportScale,
+    )
+    const maximumScale = 1.16
+    const maximumCloudWidth = Math.max(
+      1,
+      (this.canvas.width - margin * 2) / maximumScale,
+    )
+    const layout = this.fitSpeechText(bubble.text, viewportScale, maximumCloudWidth)
+    const paddingX = layout.fontSize * 0.86
+    const paddingY = layout.fontSize * 0.5
+    const cloudHeight = layout.lineHeight * layout.lines.length + paddingY * 2
+    const tailHeight = layout.fontSize * 0.38
+    const cloudWidth = Math.min(
+      maximumCloudWidth,
+      Math.max(cloudHeight * 1.05, layout.width + paddingX * 2),
+    )
+    const enterProgress = Math.min(1, progress / 0.2)
+    const exitProgress = Math.max(0, Math.min(1, (progress - 0.76) / 0.24))
+    const floatProgress = this.smoothstep(Math.min(1, progress / 0.18))
+    const phase = progress * Math.PI * 2.6 + bubble.generation * 0.47
+    const enterScale = 0.66 + 0.34 * this.easeOutBack(enterProgress)
+    const squashStretch = Math.sin(enterProgress * Math.PI) * (1 - enterProgress * 0.42)
+    const exitScale = 1 - this.smoothstep(exitProgress) * 0.08
+    const scaleX = enterScale * (1 - squashStretch * 0.08) * exitScale
+    const scaleY = enterScale * (1 + squashStretch * 0.12) * exitScale
+    const opacity = (0.84 + this.smoothstep(enterProgress) * 0.16)
+      * (1 - this.smoothstep(exitProgress))
+    const rotation = Math.sin(phase * 0.72) * 0.012 * floatProgress
+    const halfWidthBound = cloudWidth * maximumScale / 2 + margin
+    const topBound = (cloudHeight + tailHeight) * maximumScale + margin
+    const floatingX = Math.sin(phase * 0.61) * layout.fontSize * 0.045 * floatProgress
+    const floatingY = Math.sin(phase) * layout.fontSize * 0.075 * floatProgress
+      - this.smoothstep(progress) * layout.fontSize * 0.18
+    // 气泡整体（含回弹、阴影）按画布夹紧，窗口极窄或人物靠边时也不会被裁切。
+    const tailTipX = Math.max(
+      halfWidthBound,
+      Math.min(this.canvas.width - halfWidthBound, anchorX + floatingX),
+    )
+    const tailTipY = Math.max(
+      topBound,
+      Math.min(this.canvas.height - margin, anchorY + floatingY),
+    )
+    const asymmetry = ((bubble.generation * 31) % 7 - 3) / 3
+
+    this.context.save()
+    this.context.translate(tailTipX, tailTipY)
+    this.context.rotate(rotation)
+    this.context.scale(scaleX, scaleY)
+    this.traceCloudBubblePath(cloudWidth, cloudHeight, tailHeight, asymmetry)
+
+    const fill = this.context.createLinearGradient(
+      0,
+      -tailHeight - cloudHeight,
+      0,
+      -tailHeight,
+    )
+
+    fill.addColorStop(0, this.bubbleConfig.fillTop)
+    fill.addColorStop(0.5, this.bubbleConfig.fill)
+    fill.addColorStop(1, this.bubbleConfig.fillBottom)
+
+    this.context.globalAlpha = opacity
+    this.context.fillStyle = fill
+    this.context.strokeStyle = this.bubbleConfig.stroke
+    this.context.lineWidth = Math.max(1, viewportScale * this.bubbleConfig.strokeWidth)
+    this.context.lineJoin = 'round'
+    this.context.shadowColor = this.bubbleConfig.shadowColor
+    this.context.shadowBlur = this.bubbleConfig.shadowBlur * viewportScale
+    this.context.shadowOffsetY = this.bubbleConfig.shadowOffsetY * viewportScale
+    this.context.fill()
+    this.context.stroke()
+
+    this.context.shadowColor = 'transparent'
+    this.context.shadowBlur = 0
+    this.context.shadowOffsetY = 0
+    this.context.save()
+    this.context.clip()
+    this.traceCloudHighlight(cloudWidth, cloudHeight, tailHeight, asymmetry)
+    this.context.strokeStyle = this.bubbleConfig.highlightColor
+    this.context.lineWidth = Math.max(1.2, layout.fontSize * 0.06)
+    this.context.lineCap = 'round'
+    this.context.globalAlpha = opacity * 0.88
+    this.context.stroke()
+    this.context.restore()
+
+    this.context.font = `700 ${layout.fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+    this.context.fillStyle = this.bubbleConfig.textColor
+    this.context.strokeStyle = 'rgba(255, 255, 255, 0.76)'
+    this.context.lineWidth = Math.max(1.5, layout.fontSize * 0.085)
+    this.context.textAlign = 'center'
+    this.context.textBaseline = 'middle'
+
+    const textCenterY = -tailHeight - cloudHeight / 2
+    const firstLineY = textCenterY - (layout.lines.length - 1) * layout.lineHeight / 2
+
+    layout.lines.forEach((line, index) => {
+      const lineY = firstLineY + index * layout.lineHeight
+
+      this.context?.strokeText(line, 0, lineY)
+      this.context?.fillText(line, 0, lineY)
+    })
+    this.context.restore()
   }
 
   private traceCloudBubblePath(
@@ -948,6 +1208,129 @@ class SpriteRenderer {
     if (textWidth <= maxTextWidth) return fontSize
 
     return Math.max(fontSize * 0.55, fontSize * (maxTextWidth / textWidth))
+  }
+
+  private fitSpeechText(
+    text: string,
+    viewportScale: number,
+    maximumCloudWidth: number,
+  ): SpeechTextLayout {
+    if (!this.context || !this.canvas) {
+      return { lines: [text], fontSize: 1, lineHeight: 1.2, width: 1 }
+    }
+
+    // 云朵最多承载两行；先逐级缩小字号，达到可读下限后才截断，避免短句也被过早省略。
+    const maximumFontSize = Math.max(
+      1,
+      Math.min(25 * viewportScale, this.canvas.height * 0.09),
+    )
+    const minimumFontSize = Math.max(1, maximumFontSize * 0.56)
+    const maximumTextWidth = Math.max(
+      1,
+      maximumCloudWidth - maximumFontSize * 1.72,
+    )
+    let fontSize = maximumFontSize
+    let lines = [text]
+    let width = Number.POSITIVE_INFINITY
+
+    while (fontSize >= minimumFontSize) {
+      this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+
+      const candidate = this.splitSpeechText(text, maximumTextWidth)
+
+      lines = candidate.lines
+      width = candidate.width
+
+      if (candidate.fits) break
+
+      fontSize -= Math.max(0.5, viewportScale)
+    }
+
+    fontSize = Math.max(minimumFontSize, fontSize)
+    this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+
+    // 两行仍放不下时只在末尾省略，保持云朵尺寸稳定而不是让长文冲出画布。
+    if (width > maximumTextWidth) {
+      lines = lines.map(line => this.ellipsizeSpeechLine(line, maximumTextWidth))
+      width = Math.max(...lines.map(line => this.context?.measureText(line).width ?? 0))
+    }
+
+    return {
+      lines: lines.slice(0, 2),
+      fontSize,
+      lineHeight: fontSize * 1.2,
+      width,
+    }
+  }
+
+  private splitSpeechText(text: string, maximumWidth: number) {
+    if (!this.context) return { lines: [text], width: maximumWidth, fits: false }
+
+    const normalized = text.replace(/\s*\n\s*/g, '\n').trim()
+    const explicitLines = normalized.split('\n')
+
+    if (explicitLines.length > 1) {
+      const lines = [explicitLines[0], explicitLines.slice(1).join(' ')].map(line => line.trim())
+      const width = Math.max(...lines.map(line => this.context?.measureText(line).width ?? 0))
+
+      return { lines, width, fits: width <= maximumWidth }
+    }
+
+    const fullWidth = this.context.measureText(normalized).width
+
+    if (fullWidth <= maximumWidth) {
+      return { lines: [normalized], width: fullWidth, fits: true }
+    }
+
+    const characters = Array.from(normalized)
+    let bestLines = [normalized]
+    let bestWidth = fullWidth
+    let bestScore = Number.POSITIVE_INFINITY
+
+    for (let index = 1; index < characters.length; index++) {
+      const left = characters.slice(0, index).join('').trimEnd()
+      const right = characters.slice(index).join('').trimStart()
+
+      if (!left || !right) continue
+
+      const leftWidth = this.context.measureText(left).width
+      const rightWidth = this.context.measureText(right).width
+      const candidateWidth = Math.max(leftWidth, rightWidth)
+      // 英文单词内部断行的代价更高；中文仍按字宽寻找最均衡的两行切点。
+      const breaksAsciiWord = /[a-z0-9]$/i.test(left) && /^[a-z0-9]/i.test(right)
+      const score = candidateWidth
+        + Math.abs(leftWidth - rightWidth) * 0.08
+        + (breaksAsciiWord ? maximumWidth * 0.28 : 0)
+
+      if (score >= bestScore) continue
+
+      bestScore = score
+      bestWidth = candidateWidth
+      bestLines = [left, right]
+    }
+
+    return {
+      lines: bestLines,
+      width: bestWidth,
+      fits: bestLines.length <= 2 && bestWidth <= maximumWidth,
+    }
+  }
+
+  private ellipsizeSpeechLine(line: string, maximumWidth: number) {
+    if (!this.context || this.context.measureText(line).width <= maximumWidth) return line
+
+    const characters = Array.from(line)
+    const ellipsis = '…'
+
+    while (characters.length > 0) {
+      characters.pop()
+
+      const candidate = `${characters.join('').trimEnd()}${ellipsis}`
+
+      if (this.context.measureText(candidate).width <= maximumWidth) return candidate
+    }
+
+    return ellipsis
   }
 
   private showBubble(key: string, label?: string) {
@@ -1139,6 +1522,7 @@ class SpriteRenderer {
   private needsAnimationFrame() {
     if (this.renderPending) return true
     if (this.bubbles.length > 0) return true
+    if (this.speechBubble) return true
 
     const animation = this.animations.get(this.activeAnimation)
 
@@ -1167,6 +1551,8 @@ class SpriteRenderer {
     this.canvas = null
     this.context = null
     this.config = null
+    // 清空 Map 本身不保证浏览器立刻释放解码缓存，先断开 src 可缩短大模型切换的峰值驻留。
+    this.releaseLoadedAnimations([...this.animations.entries()])
     this.animations.clear()
     this.activeAnimation = ''
     this.activeFrame = 0
@@ -1180,6 +1566,9 @@ class SpriteRenderer {
     this.bubbles = []
     this.bubbleConfig = { ...defaultBubbleConfig }
     this.bubbleSequence = 0
+    // reset 同时服务模型切换与 destroy，递增代次可统一作废旧对白生命周期。
+    this.speechBubble = null
+    this.speechGeneration++
     this.lastRenderAt = Number.NEGATIVE_INFINITY
     this.renderPending = false
   }
@@ -1194,33 +1583,292 @@ class SpriteRenderer {
     playback.resolve({ reason })
   }
 
-  private async readAndValidateModel(path: string) {
-    const configPath = join(path, 'model.json')
-    const config = JSON.parse(await readTextFile(configPath)) as unknown
+  private async readAndValidateModel(path: string, generation?: number) {
+    this.assertLoadGeneration(generation)
 
+    const configPath = await resolveModelResourcePath(path, 'model.json')
+
+    this.assertLoadGeneration(generation)
+
+    // manifest 在 JSON.parse 前限制原始字节，避免小动画数量配置用超大 JSON 先耗尽 WebView 内存。
+    const rawConfig = JSON.parse(await readBoundedTextFile(
+      configPath,
+      MAX_MODEL_MANIFEST_BYTES,
+      'Sprite model manifest',
+    )) as unknown
+
+    this.assertLoadGeneration(generation)
+
+    // module.json 必须在普通模型校验和图片解码前合并；这样模块动画与顶层动画走完全
+    // 相同的引用、循环属性和雪碧图边界检查，也不会把外部模块格式泄漏到运行时状态机。
+    const config = await this.expandPetBehaviorModules(path, rawConfig, generation)
+
+    this.assertLoadGeneration(generation)
     this.assertConfig(config)
+    this.assertLoadGeneration(generation)
 
-    const animations = await Promise.all(
-      Object.entries(config.animations).map(async ([name, animation]) => {
-        const image = await this.loadImage(convertFileSrc(join(path, animation.file)))
-
-        this.assertSpritesheet(name, animation, image)
-
-        return [name, { config: animation, image }] as const
-      }),
+    const animations = await this.loadAndValidateAnimations(
+      path,
+      Object.entries(config.animations),
+      generation,
     )
+
+    try {
+      this.assertLoadGeneration(generation)
+    } catch (error) {
+      // worker 全部成功后仍可能在 Promise 续体排队期间被新模型取代，旧图片也必须释放。
+      this.releaseLoadedAnimations(animations)
+
+      throw error
+    }
 
     return { animations, config }
   }
 
-  private loadImage(source: string) {
+  private async loadAndValidateAnimations(
+    modelPath: string,
+    entries: Array<[string, SpriteAnimationConfig]>,
+    generation?: number,
+  ) {
+    const loaded: Array<readonly [string, LoadedAnimation] | undefined>
+      = Array.from({ length: entries.length })
+    let nextIndex = 0
+    let totalPixels = 0
+    let failed = false
+    let firstFailure: unknown
+
+    const worker = async () => {
+      while (!failed) {
+        const index = nextIndex++
+
+        if (index >= entries.length) return
+
+        const [name, animation] = entries[index]
+        let image: HTMLImageElement | null = null
+
+        try {
+          this.assertLoadGeneration(generation)
+
+          const resolvedPath = await resolveModelResourcePath(modelPath, animation.file)
+
+          this.assertLoadGeneration(generation)
+          if (failed) throw firstFailure
+
+          // 先读取文件头并占用像素预算，绝不能等 HTMLImageElement 已把压缩炸弹展开后再判断尺寸。
+          const dimensions = await this.readImageDimensions(resolvedPath)
+          const pixels = this.assertSpritesheetBudget(name, dimensions)
+          const nextTotalPixels = totalPixels + pixels
+
+          if (nextTotalPixels > MAX_TOTAL_SPRITESHEET_PIXELS) {
+            throw new RangeError(
+              `Sprite model exceeds the ${MAX_TOTAL_SPRITESHEET_PIXELS} total pixel budget`,
+            )
+          }
+
+          // JS 在 await 之间单线程执行；解码前先写入可让四个 worker 共用一个精确累计预算。
+          totalPixels = nextTotalPixels
+
+          this.assertLoadGeneration(generation)
+          if (failed) throw firstFailure
+
+          image = await this.loadImage(convertFileSrc(resolvedPath), generation)
+
+          this.assertLoadGeneration(generation)
+          if (failed) throw firstFailure
+
+          // 解码尺寸必须与已计入预算的文件头一致，避免格式解析分歧绕过总像素累计。
+          if (image.naturalWidth !== dimensions.width
+            || image.naturalHeight !== dimensions.height) {
+            throw new Error(`Sprite animation "${name}" decoded dimensions differ from its header`)
+          }
+
+          this.assertSpritesheet(name, animation, dimensions)
+          this.assertLoadGeneration(generation)
+
+          loaded[index] = [name, { config: animation, image }]
+          image = null
+        } catch (error) {
+          if (image) this.releaseImage(image)
+
+          // 首个错误关闭取号；已经在途的至多四个任务仍会收口并释放各自局部图片。
+          if (!failed) {
+            failed = true
+            firstFailure = error
+          }
+
+          return
+        }
+      }
+    }
+    // 限制并行解码数，避免大量高分辨率雪碧图同时展开造成瞬时内存尖峰。
+    const workerCount = Math.min(MAX_CONCURRENT_IMAGE_LOADS, entries.length)
+
+    await Promise.all(Array.from({ length: workerCount }, worker))
+
+    if (failed) {
+      this.releaseLoadedAnimations(loaded.filter(entry => entry !== undefined))
+
+      throw firstFailure
+    }
+
+    if (loaded.includes(undefined)) {
+      this.releaseLoadedAnimations(loaded.filter(entry => entry !== undefined))
+      throw new Error('Sprite model loading ended before every animation was validated')
+    }
+
+    return loaded as Array<readonly [string, LoadedAnimation]>
+  }
+
+  private async expandPetBehaviorModules(
+    path: string,
+    config: unknown,
+    generation?: number,
+  ): Promise<unknown> {
+    if (!this.isRecord(config)
+      || config.renderer !== 'sprite'
+      || !this.isRecord(config.behaviors)
+      || !this.isRecord(config.behaviors.pet)
+      || !Object.prototype.hasOwnProperty.call(config.behaviors.pet, 'modules')) {
+      return config
+    }
+
+    // 根配置本身不完整时继续交给 assertConfig 产生既有错误；只有具备模块解析所需的
+    // 动画表和画布后才读取外部文件，避免次要模块错误掩盖主 manifest 的结构错误。
+    if (!this.isRecord(config.animations)
+      || !this.isRecord(config.canvas)
+      || !this.isPositiveNumber(config.canvas.width)
+      || !this.isPositiveNumber(config.canvas.height)) {
+      return config
+    }
+
+    const pet = config.behaviors.pet
+    const result = await loadPetBehaviorModules(path, pet.modules, {
+      animations: config.animations as Record<string, SpriteAnimationConfig>,
+      canvas: {
+        width: config.canvas.width,
+        height: config.canvas.height,
+      },
+      hitAreas: this.isRecord(pet.hitAreas) ? pet.hitAreas : undefined,
+      // 模块按顺序读取；每次文件 I/O 前后检查代次，让切模后不再继续遍历剩余模块。
+      assertActive: () => this.assertLoadGeneration(generation),
+    })
+
+    return {
+      ...config,
+      animations: result.animations,
+      behaviors: {
+        ...config.behaviors,
+        pet: {
+          ...pet,
+          modules: result.modules,
+        },
+      },
+    }
+  }
+
+  private loadImage(source: string, generation?: number) {
     return new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
+      let settled = false
+      let unregister: () => void = () => void 0
 
-      image.onload = () => resolve(image)
-      image.onerror = () => reject(new Error(`Failed to load sprite image: ${source}`))
-      image.src = source
+      // load/error/abort 共用一次性出口，保证代次登记和 DOM 回调在任何竞态顺序下都被清理。
+      const finish = (callback: () => void) => {
+        if (settled) return
+
+        settled = true
+        image.onload = null
+        image.onerror = null
+        unregister()
+        callback()
+      }
+
+      const abort = () => {
+        finish(() => {
+          this.releaseImage(image)
+          reject(new DOMException('Sprite model load was superseded', 'AbortError'))
+        })
+      }
+
+      if (generation !== undefined) {
+        unregister = this.registerPendingImageLoad(generation, abort)
+      }
+
+      image.onload = () => finish(() => resolve(image))
+      image.onerror = () => finish(() => {
+        this.releaseImage(image)
+        reject(new Error(`Failed to load sprite image: ${source}`))
+      })
+
+      try {
+        this.assertLoadGeneration(generation)
+        image.src = source
+      } catch {
+        abort()
+      }
     })
+  }
+
+  private async readImageDimensions(path: string): Promise<SpriteImageDimensions> {
+    // 这里只取有上限的文件头，不把整张压缩图片搬进 JS；WebKit 解码要等尺寸预算通过后才开始。
+    const header = await readFilePrefix(path, MAX_IMAGE_HEADER_BYTES)
+    const dimensions = parseImageDimensions(header.bytes, header.complete)
+
+    if (!dimensions
+      || !Number.isSafeInteger(dimensions.width)
+      || !Number.isSafeInteger(dimensions.height)
+      || dimensions.width <= 0
+      || dimensions.height <= 0) {
+      throw new Error(`Unsupported or invalid sprite image header: ${path}`)
+    }
+
+    return dimensions
+  }
+
+  private registerPendingImageLoad(generation: number, abort: () => void) {
+    // 以代次分桶保存 abort，切模时只取消旧模型，不会误杀刚启动的新模型解码。
+    let pending = this.pendingImageLoads.get(generation)
+
+    if (!pending) {
+      pending = new Set()
+      this.pendingImageLoads.set(generation, pending)
+    }
+
+    pending.add(abort)
+
+    return () => {
+      pending?.delete(abort)
+
+      if (pending?.size === 0) this.pendingImageLoads.delete(generation)
+    }
+  }
+
+  private abortPendingImageLoads(exceptGeneration?: number) {
+    // abort 会同步修改 Map，因此复制集合后遍历，避免跳过同代次的其他请求。
+    for (const [generation, aborts] of [...this.pendingImageLoads.entries()]) {
+      if (generation === exceptGeneration) continue
+
+      for (const abort of [...aborts]) abort()
+    }
+  }
+
+  private assertLoadGeneration(generation?: number) {
+    if (generation !== undefined && generation !== this.loadGeneration) {
+      throw new DOMException('Sprite model load was superseded', 'AbortError')
+    }
+  }
+
+  private releaseLoadedAnimations(
+    animations: Array<readonly [string, LoadedAnimation]>,
+  ) {
+    for (const [, animation] of animations) this.releaseImage(animation.image)
+  }
+
+  private releaseImage(image: HTMLImageElement) {
+    image.onload = null
+    image.onerror = null
+    // removeAttribute 不会把空字符串解析成当前页面 URL，适合中止并释放本地 asset 图片。
+    image.removeAttribute('src')
   }
 
   private assertConfig(config: unknown): asserts config is SpriteModelConfig {
@@ -1259,6 +1907,13 @@ class SpriteRenderer {
       || Array.isArray(candidate.animations)
       || Object.keys(candidate.animations).length === 0) {
       throw new Error('Sprite model animations are missing')
+    }
+
+    // 动画数量先于图片解码限制，阻止小文件海量 fan-out 绕过像素预算拖垮加载器。
+    if (Object.keys(candidate.animations).length > MAX_ANIMATION_COUNT) {
+      throw new RangeError(
+        `Sprite model animations cannot exceed ${MAX_ANIMATION_COUNT}`,
+      )
     }
 
     if (typeof candidate.defaultAnimation !== 'string'
@@ -1419,16 +2074,29 @@ class SpriteRenderer {
   private assertSpritesheet(
     name: string,
     animation: SpriteAnimationConfig,
-    image: HTMLImageElement,
+    dimensions: SpriteImageDimensions,
   ) {
     const requiredColumns = Math.min(animation.frames, animation.columns)
     const requiredRows = Math.ceil(animation.frames / animation.columns)
 
-    // 配置尺寸合法不代表图片装得下全部帧；提前核对实际解码尺寸可避免运行时抽到透明区。
-    if (image.naturalWidth < requiredColumns * animation.frameWidth
-      || image.naturalHeight < requiredRows * animation.frameHeight) {
+    // 文件头尺寸已在解码前取得；用同一份数据核对帧边界，避免预算检查和布局检查口径分裂。
+    if (dimensions.width < requiredColumns * animation.frameWidth
+      || dimensions.height < requiredRows * animation.frameHeight) {
       throw new Error(`Sprite animation "${name}" exceeds its spritesheet bounds`)
     }
+  }
+
+  private assertSpritesheetBudget(name: string, dimensions: SpriteImageDimensions) {
+    // 先比较单边可避免恶意 uint32 尺寸相乘越过 JS safe-integer 后再参与预算判断。
+    if (dimensions.width > MAX_SPRITESHEET_PIXELS
+      || dimensions.height > MAX_SPRITESHEET_PIXELS
+      || dimensions.width * dimensions.height > MAX_SPRITESHEET_PIXELS) {
+      throw new RangeError(
+        `Sprite animation "${name}" exceeds the ${MAX_SPRITESHEET_PIXELS} pixel sheet budget`,
+      )
+    }
+
+    return dimensions.width * dimensions.height
   }
 
   private isPositiveInteger(value: unknown): value is number {
@@ -1441,6 +2109,10 @@ class SpriteRenderer {
 
   private isNonNegativeNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
   }
 
   private isDisplayableLabel(value: string) {
@@ -1479,6 +2151,517 @@ class SpriteRenderer {
 
     return true
   }
+}
+
+const JPEG_START_OF_FRAME_MARKERS = new Set([
+  0xC0,
+  0xC1,
+  0xC2,
+  0xC3,
+  0xC5,
+  0xC6,
+  0xC7,
+  0xC9,
+  0xCA,
+  0xCB,
+  0xCD,
+  0xCE,
+  0xCF,
+])
+
+function parseImageDimensions(
+  bytes: Uint8Array,
+  completeFile: boolean,
+): SpriteImageDimensions | null {
+  // 仅解析各格式声明尺寸所需的最小头结构；这里不创建 DOM，也不触碰压缩像素主体。
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+
+  if (hasBytes(bytes, 0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    && hasAscii(bytes, 12, 'IHDR') && bytes.byteLength >= 24) {
+    return {
+      width: view.getUint32(16),
+      height: view.getUint32(20),
+    }
+  }
+
+  if (hasAscii(bytes, 0, 'RIFF') && hasAscii(bytes, 8, 'WEBP')) {
+    return parseWebpDimensions(bytes, view)
+  }
+
+  if ((hasAscii(bytes, 0, 'GIF87a') || hasAscii(bytes, 0, 'GIF89a'))
+    && bytes.byteLength >= 10) {
+    return {
+      width: view.getUint16(6, true),
+      height: view.getUint16(8, true),
+    }
+  }
+
+  if (hasBytes(bytes, 0, [0xFF, 0xD8])) {
+    return parseJpegDimensions(bytes, view)
+  }
+
+  const avifDimensions = parseAvifDimensions(bytes, view)
+
+  if (avifDimensions) return avifDimensions
+
+  if (hasBytes(bytes, 0, [0x00, 0x00, 0x01, 0x00])) {
+    return parseIcoDimensions(bytes, view)
+  }
+
+  if (hasAscii(bytes, 0, 'BM') && bytes.byteLength >= 26) {
+    const width = view.getInt32(18, true)
+    const height = view.getInt32(22, true)
+
+    return {
+      width: Math.abs(width),
+      height: Math.abs(height),
+    }
+  }
+
+  // SVG 没有压缩像素头；必须确认整个文件都在固定字节预算内，才允许 WebView 继续解码。
+  const svgDimensions = completeFile ? parseSvgDimensions(bytes) : null
+
+  if (svgDimensions) return svgDimensions
+
+  return null
+}
+
+interface IsoBox {
+  type: string
+  dataStart: number
+  end: number
+}
+
+interface IsoBoxReadResult {
+  boxes: IsoBox[]
+  complete: boolean
+}
+
+function parseAvifDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+): SpriteImageDimensions | null {
+  const topLevelBoxes = readIsoBoxes(bytes, view, 0, bytes.byteLength).boxes
+  const fileType = topLevelBoxes.find(box => box.type === 'ftyp')
+
+  if (!fileType || fileType.dataStart + 8 > fileType.end) return null
+
+  const brands = [readAscii(bytes, fileType.dataStart, 4)]
+
+  for (let offset = fileType.dataStart + 8; offset + 4 <= fileType.end; offset += 4) {
+    brands.push(readAscii(bytes, offset, 4))
+  }
+
+  if (!brands.some(brand => brand === 'avif' || brand === 'avis')) return null
+
+  const dimensions: SpriteImageDimensions[] = []
+
+  // 只接受完整落在头部窗口内的 meta，并收集其中全部 ispe；取最大值可阻止前置伪小属性绕预算。
+  for (const box of topLevelBoxes.filter(box => box.type === 'meta')) {
+    const collected = collectIsoImageSpatialExtents(bytes, view, box, 0)
+
+    if (collected === null) return null
+
+    dimensions.push(...collected)
+  }
+
+  return dimensions.reduce<SpriteImageDimensions | null>((largest, candidate) => {
+    if (!largest || candidate.width * candidate.height > largest.width * largest.height) {
+      return candidate
+    }
+
+    return largest
+  }, null)
+}
+
+function collectIsoImageSpatialExtents(
+  bytes: Uint8Array,
+  view: DataView,
+  box: IsoBox,
+  depth: number,
+): SpriteImageDimensions[] | null {
+  if (box.type === 'ispe') {
+    if (box.dataStart + 12 > box.end) return null
+
+    return [{
+      width: view.getUint32(box.dataStart + 4),
+      height: view.getUint32(box.dataStart + 8),
+    }]
+  }
+
+  if (depth >= 6 || !['meta', 'iprp', 'ipco'].includes(box.type)) return []
+
+  // meta 是 FullBox，version/flags 占四字节；iprp/ipco 的 payload 直接由子 box 组成。
+  const childStart = box.dataStart + (box.type === 'meta' ? 4 : 0)
+
+  if (childStart > box.end) return null
+
+  const children = readIsoBoxes(bytes, view, childStart, box.end)
+
+  if (!children.complete) return null
+
+  const dimensions: SpriteImageDimensions[] = []
+
+  for (const child of children.boxes) {
+    const collected = collectIsoImageSpatialExtents(bytes, view, child, depth + 1)
+
+    if (collected === null) return null
+
+    dimensions.push(...collected)
+  }
+
+  return dimensions
+}
+
+function readIsoBoxes(
+  bytes: Uint8Array,
+  view: DataView,
+  start: number,
+  end: number,
+): IsoBoxReadResult {
+  const boxes: IsoBox[] = []
+  let offset = start
+
+  while (offset + 8 <= end) {
+    const size32 = view.getUint32(offset)
+    const type = readAscii(bytes, offset + 4, 4)
+    let headerSize = 8
+    let size = size32
+
+    if (size32 === 1) {
+      if (offset + 16 > end) break
+
+      const high = view.getUint32(offset + 8)
+      const low = view.getUint32(offset + 12)
+
+      size = high * 0x1_0000_0000 + low
+      headerSize = 16
+    } else if (size32 === 0) {
+      break
+    }
+
+    // 只接受完整落在 512 KiB 头部窗口内的安全整数 box；超界后停止而非触碰压缩主体。
+    if (!Number.isSafeInteger(size) || size < headerSize || offset + size > end) break
+
+    const boxEnd = offset + size
+
+    boxes.push({ type, dataStart: offset + headerSize, end: boxEnd })
+    offset = boxEnd
+  }
+
+  return { boxes, complete: offset === end }
+}
+
+function parseIcoDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+): SpriteImageDimensions | null {
+  if (bytes.byteLength < 6) return null
+
+  const count = view.getUint16(4, true)
+  const directoryEnd = 6 + count * 16
+
+  if (count === 0 || directoryEnd > bytes.byteLength) return null
+
+  let largest: SpriteImageDimensions | null = null
+
+  for (let offset = 6; offset < directoryEnd; offset += 16) {
+    const dataSize = view.getUint32(offset + 8, true)
+    const dataOffset = view.getUint32(offset + 12, true)
+    const dataEnd = dataOffset + dataSize
+
+    // 目录宽高可伪造；每个 payload 必须完整落在探测窗口内，并从嵌入 PNG/DIB 自身读取尺寸。
+    if (!Number.isSafeInteger(dataEnd)
+      || dataSize === 0
+      || dataOffset < directoryEnd
+      || dataEnd > bytes.byteLength) {
+      return null
+    }
+
+    const dimensions = parseIcoPayloadDimensions(bytes, view, dataOffset, dataEnd)
+
+    if (!dimensions) return null
+    if (!largest || dimensions.width * dimensions.height > largest.width * largest.height) {
+      largest = dimensions
+    }
+  }
+
+  return largest
+}
+
+function parseIcoPayloadDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+  start: number,
+  end: number,
+): SpriteImageDimensions | null {
+  if (start + 24 <= end
+    && hasBytes(bytes, start, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    && hasAscii(bytes, start + 12, 'IHDR')) {
+    return {
+      width: view.getUint32(start + 16),
+      height: view.getUint32(start + 20),
+    }
+  }
+
+  if (start + 4 > end) return null
+
+  const dibSize = view.getUint32(start, true)
+
+  if (dibSize === 12 && start + 12 <= end) {
+    return {
+      width: view.getUint16(start + 4, true),
+      height: view.getUint16(start + 6, true) / 2,
+    }
+  }
+
+  if (dibSize >= 40 && start + 12 <= end && start + dibSize <= end) {
+    return {
+      width: Math.abs(view.getInt32(start + 4, true)),
+      // ICO 的 DIB 高度同时包含 XOR 位图和 AND mask，所以实际图像高度为一半。
+      height: Math.abs(view.getInt32(start + 8, true)) / 2,
+    }
+  }
+
+  return null
+}
+
+function parseSvgDimensions(bytes: Uint8Array): SpriteImageDimensions | null {
+  let text: string
+
+  try {
+    // TextDecoder 只把有界头部当纯文本读取，不构造 DOM、解析实体或执行 SVG 中的任何内容。
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return null
+  }
+
+  const rootStart = findSvgRootStart(text)
+
+  if (rootStart < 0) return null
+
+  const rootEnd = findXmlTagEnd(text, rootStart + 4)
+
+  if (rootEnd < 0) return null
+
+  const rootTag = text.slice(rootStart + 4, rootEnd)
+  const attributes = readSvgDimensionAttributes(rootTag)
+  const viewBox = parseSvgViewBox(attributes.viewBox)
+  let width = parseSvgLength(attributes.width)
+  let height = parseSvgLength(attributes.height)
+
+  if (width === null && height === null && viewBox) {
+    width = viewBox.width
+    height = viewBox.height
+  } else if (width !== null && height === null && viewBox) {
+    height = width * viewBox.height / viewBox.width
+  } else if (height !== null && width === null && viewBox) {
+    width = height * viewBox.width / viewBox.height
+  }
+
+  if (width === null || height === null) return null
+
+  return { width, height }
+}
+
+function findSvgRootStart(text: string) {
+  let offset = text.charCodeAt(0) === 0xFEFF ? 1 : 0
+  let sawXmlDeclaration = false
+
+  while (offset < text.length) {
+    while (offset < text.length && /[\t\n\r ]/.test(text[offset])) offset++
+
+    if (text.startsWith('<!--', offset)) {
+      const commentEnd = text.indexOf('-->', offset + 4)
+
+      if (commentEnd < 0) return -1
+
+      offset = commentEnd + 3
+      continue
+    }
+
+    if (!sawXmlDeclaration
+      && text.startsWith('<?xml', offset)
+      && /[\s?]/.test(text[offset + 5] ?? '')) {
+      const declarationEnd = text.indexOf('?>', offset + 5)
+
+      if (declarationEnd < 0) return -1
+
+      sawXmlDeclaration = true
+      offset = declarationEnd + 2
+      continue
+    }
+
+    break
+  }
+
+  // DOCTYPE/实体和任意其他根前内容全部拒绝；预算探头只读取真实的首个 svg 根标签。
+  if (!text.startsWith('<svg', offset) || !/[\s>]/.test(text[offset + 4] ?? '')) return -1
+
+  return offset
+}
+
+function findXmlTagEnd(text: string, start: number) {
+  let quote = ''
+
+  for (let index = start; index < text.length; index++) {
+    const character = text[index]
+
+    if (quote) {
+      if (character === quote) quote = ''
+    } else if (character === '"' || character === '\'') {
+      quote = character
+    } else if (character === '>') {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function readSvgDimensionAttributes(rootTag: string) {
+  const attributes: { width?: string, height?: string, viewBox?: string } = {}
+  const pattern = /(?:^|\s)(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g
+
+  for (const match of rootTag.matchAll(pattern)) {
+    const name = match[1] as 'width' | 'height' | 'viewBox'
+
+    attributes[name] = match[2] ?? match[3] ?? match[4]
+  }
+
+  return attributes
+}
+
+function parseSvgLength(value?: string) {
+  if (value === undefined) return null
+
+  const match = value.trim().match(/^(\+?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(px|in|cm|mm|pt|pc)?$/i)
+
+  if (!match) return null
+
+  const numeric = Number(match[1])
+  const scales: Record<string, number> = {
+    px: 1,
+    in: 96,
+    cm: 96 / 2.54,
+    mm: 96 / 25.4,
+    pt: 96 / 72,
+    pc: 16,
+  }
+  const scale = scales[match[2]?.toLowerCase() ?? 'px']
+
+  if (scale === undefined) return null
+
+  const pixels = numeric * scale
+
+  return Number.isFinite(pixels) && pixels > 0 ? pixels : null
+}
+
+function parseSvgViewBox(value?: string) {
+  if (value === undefined) return null
+
+  const numbers = value.trim().split(/[\s,]+/).map(Number)
+
+  if (numbers.length !== 4 || numbers.some(number => !Number.isFinite(number))) return null
+
+  const [, , width, height] = numbers
+
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+function parseWebpDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+): SpriteImageDimensions | null {
+  if (hasAscii(bytes, 12, 'VP8X') && bytes.byteLength >= 30) {
+    return {
+      width: 1 + readUint24LittleEndian(bytes, 24),
+      height: 1 + readUint24LittleEndian(bytes, 27),
+    }
+  }
+
+  if (hasAscii(bytes, 12, 'VP8 ')
+    && hasBytes(bytes, 23, [0x9D, 0x01, 0x2A])
+    && bytes.byteLength >= 30) {
+    return {
+      width: view.getUint16(26, true) & 0x3FFF,
+      height: view.getUint16(28, true) & 0x3FFF,
+    }
+  }
+
+  if (hasAscii(bytes, 12, 'VP8L') && bytes[20] === 0x2F && bytes.byteLength >= 25) {
+    return {
+      width: 1 + bytes[21] + ((bytes[22] & 0x3F) << 8),
+      height: 1
+        + ((bytes[22] & 0xC0) >> 6)
+        + (bytes[23] << 2)
+        + ((bytes[24] & 0x0F) << 10),
+    }
+  }
+
+  return null
+}
+
+function parseJpegDimensions(
+  bytes: Uint8Array,
+  view: DataView,
+): SpriteImageDimensions | null {
+  let offset = 2
+
+  // JPEG 尺寸位于首个 SOF 段；只扫描有界头部，不越过 SOS 去解析压缩像素数据。
+  while (offset < bytes.byteLength) {
+    while (offset < bytes.byteLength && bytes[offset] !== 0xFF) offset++
+    while (offset < bytes.byteLength && bytes[offset] === 0xFF) offset++
+
+    if (offset >= bytes.byteLength) return null
+
+    const marker = bytes[offset++]
+
+    if (marker === 0xD9 || marker === 0xDA) return null
+    if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD8)) continue
+    if (offset + 2 > bytes.byteLength) return null
+
+    const segmentLength = view.getUint16(offset)
+
+    if (segmentLength < 2 || offset + segmentLength > bytes.byteLength) return null
+
+    if (JPEG_START_OF_FRAME_MARKERS.has(marker)) {
+      if (segmentLength < 7) return null
+
+      return {
+        width: view.getUint16(offset + 5),
+        height: view.getUint16(offset + 3),
+      }
+    }
+
+    offset += segmentLength
+  }
+
+  return null
+}
+
+function hasAscii(bytes: Uint8Array, offset: number, expected: string) {
+  if (offset + expected.length > bytes.byteLength) return false
+
+  return Array.from(expected).every((character, index) => {
+    return bytes[offset + index] === character.charCodeAt(0)
+  })
+}
+
+function readAscii(bytes: Uint8Array, offset: number, length: number) {
+  if (offset < 0 || offset + length > bytes.byteLength) return ''
+
+  return String.fromCharCode(...bytes.subarray(offset, offset + length))
+}
+
+function hasBytes(bytes: Uint8Array, offset: number, expected: number[]) {
+  if (offset + expected.length > bytes.byteLength) return false
+
+  return expected.every((value, index) => bytes[offset + index] === value)
+}
+
+function readUint24LittleEndian(bytes: Uint8Array, offset: number) {
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16)
 }
 
 export const sprite = new SpriteRenderer()

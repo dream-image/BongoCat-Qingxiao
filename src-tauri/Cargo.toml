@@ -35,7 +35,6 @@ tauri-plugin-autostart = "2"
 tauri-plugin-macos-permissions = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-fs_extra = "1"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-locale = "2"
@@ -46,6 +45,10 @@ gilrs = { git = "https://github.com/ayangweb/gilrs", default-features = false, f
 
 [target."cfg(target_os = \"macos\")".dependencies]
 tauri-nspanel.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# 模型目录复制要由目录 fd 驱动 openat/O_NOFOLLOW；rustix 封装平台差异并保持句柄所有权安全。
+rustix = { version = "1", features = ["fs"] }
 
 [features]
 cargo-clippy = []

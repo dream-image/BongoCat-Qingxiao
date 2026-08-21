@@ -188,6 +188,11 @@
         "quitApp": "Sair"
       }
     },
+    "usePetActionMenu": {
+      "title": "Interações do pet",
+      "group": "Ações",
+      "unavailable": "Nenhuma ação disponível"
+    },
     "useTray": {
       "checkUpdate": "Verificar atualizações",
       "openSource": "Código Fonte"

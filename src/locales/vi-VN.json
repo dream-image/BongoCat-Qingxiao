@@ -188,6 +188,11 @@
         "quitApp": "Thoát"
       }
     },
+    "usePetActionMenu": {
+      "title": "Tương tác thú cưng",
+      "group": "Hành động",
+      "unavailable": "Không có hành động khả dụng"
+    },
     "useTray": {
       "checkUpdate": "Kiểm tra cập nhật",
       "openSource": "Mã nguồn"

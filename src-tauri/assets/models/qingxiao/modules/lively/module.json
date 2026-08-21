@@ -1,0 +1,726 @@
+{
+  "version": 1,
+  "id": "lively",
+  "displayName": {
+    "zh-CN": "灵动互动",
+    "en-US": "Lively"
+  },
+  "order": 10,
+  "animations": {
+    "startled": {
+      "file": "sprites/pet-startled.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [75, 90, 105, 125, 160, 240, 240, 160, 125, 105, 90, 75]
+    },
+    "summon-orb": {
+      "file": "sprites/pet-summon-orb.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [70, 80, 95, 110, 130, 160, 210, 300, 300, 210, 160, 130, 110, 95, 80, 70]
+    },
+    "glissando": {
+      "file": "sprites/pet-glissando.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [80, 110, 140, 180, 240, 300, 300, 240, 180, 140, 110, 80]
+    },
+    "wink-wave": {
+      "file": "sprites/pet-wink-wave.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [70, 80, 95, 110, 130, 160, 210, 280, 280, 210, 160, 130, 110, 95, 80, 70]
+    }
+  },
+  "actions": {
+    "startled": {
+      "animation": "startled",
+      "priority": 38,
+      "cooldownMs": 4500,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 80,
+        "durationMs": 2000,
+        "anchor": {
+          "x": 352,
+          "y": 164
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "嗯？",
+              "en-US": "Hm?"
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "你叫我？",
+              "en-US": "Did you call me?"
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "……吓我一跳。",
+              "en-US": "...You startled me."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "summon-orb": {
+      "animation": "summon-orb",
+      "priority": 24,
+      "cooldownMs": 18000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 120,
+        "durationMs": 2200,
+        "anchor": {
+          "x": 356,
+          "y": 170
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云气，凝。",
+              "en-US": "Cloudlight, gather."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "别碰，会散。",
+              "en-US": "Don't touch. It'll scatter."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "glissando": {
+      "animation": "glissando",
+      "priority": 28,
+      "cooldownMs": 7000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2100,
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "听。",
+              "en-US": "Listen."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "这一弦，送你。",
+              "en-US": "This note is for you."
+            },
+            "weight": 3
+          }
+        ]
+      }
+    },
+    "wink-wave": {
+      "animation": "wink-wave",
+      "priority": 32,
+      "cooldownMs": 15000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 90,
+        "durationMs": 2200,
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "早。",
+              "en-US": "Morning."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "今天也要认真。",
+              "en-US": "Do your best today."
+            },
+            "weight": 3
+          }
+        ]
+      }
+    },
+    "holiday-greeting": {
+      "animation": "wink-wave",
+      "priority": 36,
+      "cooldownMs": 21600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 90,
+        "durationMs": 2500,
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "节日安好。",
+              "en-US": "Happy holiday."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "今天，准你放松。",
+              "en-US": "You may relax today."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "startup-greeting": {
+      "animation": "wink-wave",
+      "priority": 35,
+      "cooldownMs": 21600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 90,
+        "durationMs": 2300,
+        "anchor": { "x": 350, "y": 164 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "你来了。今日也由我陪着。",
+              "en-US": "You're here. I'll keep you company today."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "早些开始，便能早些听琴。",
+              "en-US": "Begin early, and you may hear the strings sooner."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "familiar-return": {
+      "animation": "wink-wave",
+      "priority": 34,
+      "cooldownMs": 21600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2400,
+        "anchor": { "x": 350, "y": 164 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "舍得回来了？云都等散了一回。",
+              "en-US": "So you finally returned? Even the clouds dispersed once."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "几日不见，倒也没忘了你。",
+              "en-US": "A few days apart, yet I haven't forgotten you."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "long-awaited-return": {
+      "animation": "startled",
+      "priority": 40,
+      "cooldownMs": 86400000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2700,
+        "anchor": { "x": 352, "y": 164 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "这么久……我还以为你迷在云海里了。",
+              "en-US": "So long... I thought you'd lost yourself in the cloud sea."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "回来就好。只许这一次让我久等。",
+              "en-US": "It's good you're back. Don't keep me waiting that long again."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "typing-flurry": {
+      "animation": "glissando",
+      "priority": 27,
+      "cooldownMs": 900000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.75,
+        "delayMs": 100,
+        "durationMs": 2200,
+        "anchor": { "x": 342, "y": 168 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "指下生风，倒有几分琴意。",
+              "en-US": "Your fingers stir the wind. Almost like playing strings."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "这么急？先把气息稳住。",
+              "en-US": "Such haste? Steady your breath first."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "gamepad-combo": {
+      "animation": "summon-orb",
+      "priority": 29,
+      "cooldownMs": 1200000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.8,
+        "delayMs": 100,
+        "durationMs": 2200,
+        "anchor": { "x": 356, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "连招不错。再快半拍试试。",
+              "en-US": "A fine combo. Try it half a beat faster."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "胜负未定，可别先得意。",
+              "en-US": "The outcome isn't settled, so don't celebrate yet."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "idle-soft-tune": {
+      "animation": "glissando",
+      "priority": 18,
+      "cooldownMs": 360000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.35,
+        "delayMs": 120,
+        "durationMs": 2000,
+        "anchor": { "x": 342, "y": 168 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "无事，便听一弦。",
+              "en-US": "If there's nothing pressing, listen to one note."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "嘘，别惊散了余音。",
+              "en-US": "Hush. Don't scatter the lingering note."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "weekday-greeting": {
+      "animation": "wink-wave",
+      "priority": 30,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 90,
+        "durationMs": 2300,
+        "anchor": { "x": 350, "y": 164 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "晨光正好。今日的事，一件件来。",
+              "en-US": "The morning light is kind. Take today's tasks one by one."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "醒了便认真些，我可看着呢。",
+              "en-US": "Now that you're awake, focus. I'm watching."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "weekend-greeting": {
+      "animation": "summon-orb",
+      "priority": 29,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 110,
+        "durationMs": 2300,
+        "anchor": { "x": 356, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "今日不催你。云珠借你玩一会儿。",
+              "en-US": "I won't rush you today. You may play with this cloud orb awhile."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "难得清闲，慢一些也无妨。",
+              "en-US": "Leisure is rare. There's no harm in taking it slowly."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "friday-release": {
+      "animation": "glissando",
+      "priority": 38,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2400,
+        "anchor": { "x": 342, "y": 168 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "一周辛苦。收尾以后，准你松弦。",
+              "en-US": "A week well endured. Finish up, then loosen the strings."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "周末近了，可别把最后一拍弹乱。",
+              "en-US": "The weekend is near. Don't fumble the final beat."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "labor-day-greeting": {
+      "animation": "wink-wave",
+      "priority": 39,
+      "cooldownMs": 86400000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 90,
+        "durationMs": 2500,
+        "anchor": { "x": 350, "y": 164 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "劳有所获，亦当歇息。今日别逞强。",
+              "en-US": "Labor deserves its reward and its rest. Don't overdo it today."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "辛苦了。此句只说一遍，听清便好。",
+              "en-US": "You've worked hard. I'll say it only once, so listen well."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "ambient-orb": {
+      "animation": "summon-orb",
+      "priority": 14,
+      "cooldownMs": 300000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.08,
+        "delayMs": 120,
+        "durationMs": 1800,
+        "anchor": { "x": 356, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云气正好。",
+              "en-US": "The cloudlight feels just right."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "ambient-glissando": {
+      "animation": "glissando",
+      "priority": 14,
+      "cooldownMs": 300000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.12,
+        "delayMs": 120,
+        "durationMs": 1800,
+        "anchor": { "x": 342, "y": 168 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "随风一弦。",
+              "en-US": "One note upon the wind."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    }
+  },
+  "triggers": [
+    {
+      "id": "manual-startled",
+      "type": "manual",
+      "action": "startled",
+      "label": {
+        "zh-CN": "唤她一声",
+        "en-US": "Call her"
+      },
+      "group": {
+        "zh-CN": "灵动互动",
+        "en-US": "Lively"
+      },
+      "order": 10,
+      "enterPet": true
+    },
+    {
+      "id": "manual-summon-orb",
+      "type": "manual",
+      "action": "summon-orb",
+      "label": {
+        "zh-CN": "凝一颗云珠",
+        "en-US": "Summon a cloud orb"
+      },
+      "group": {
+        "zh-CN": "灵动互动",
+        "en-US": "Lively"
+      },
+      "order": 20,
+      "enterPet": true
+    },
+    {
+      "id": "manual-glissando",
+      "type": "manual",
+      "action": "glissando",
+      "label": {
+        "zh-CN": "流泉扫弦",
+        "en-US": "Play a glissando"
+      },
+      "group": {
+        "zh-CN": "灵动互动",
+        "en-US": "Lively"
+      },
+      "order": 30,
+      "enterPet": true
+    },
+    {
+      "id": "manual-wink-wave",
+      "type": "manual",
+      "action": "wink-wave",
+      "label": {
+        "zh-CN": "挥手问候",
+        "en-US": "Wave hello"
+      },
+      "group": {
+        "zh-CN": "灵动互动",
+        "en-US": "Lively"
+      },
+      "order": 40,
+      "enterPet": true
+    },
+    {
+      "id": "ambient-lively",
+      "type": "interval",
+      "delayMs": [420000, 720000],
+      "choices": [
+        {
+          "action": "ambient-orb",
+          "weight": 2
+        },
+        {
+          "action": "ambient-glissando",
+          "weight": 3
+        }
+      ]
+    },
+    {
+      "id": "startup-greeting",
+      "type": "session",
+      "event": "startup",
+      "action": "startup-greeting",
+      "delayMs": [3000, 8000],
+      "catchUpMs": 30000,
+      "enterPet": true
+    },
+    {
+      "id": "return-after-hours",
+      "type": "visibility-return",
+      "action": "familiar-return",
+      "minAwayMs": 21600000,
+      "maxAwayMs": 259200000,
+      "settleMs": 1600,
+      "catchUpMs": 30000,
+      "enterPet": true
+    },
+    {
+      "id": "return-after-days",
+      "type": "visibility-return",
+      "action": "long-awaited-return",
+      "minAwayMs": 259200000,
+      "settleMs": 1800,
+      "catchUpMs": 45000,
+      "enterPet": true
+    },
+    {
+      "id": "keyboard-typing-flurry",
+      "type": "activity-burst",
+      "action": "typing-flurry",
+      "sources": ["keyboard"],
+      "windowMs": 8000,
+      "minimumEvents": 32,
+      "quietMs": 1800,
+      "catchUpMs": 15000,
+      "enterPet": true
+    },
+    {
+      "id": "gamepad-combo",
+      "type": "activity-burst",
+      "action": "gamepad-combo",
+      "sources": ["gamepad"],
+      "windowMs": 20000,
+      "minimumEvents": 12,
+      "quietMs": 2500,
+      "catchUpMs": 20000,
+      "enterPet": true
+    },
+    {
+      "id": "idle-soft-tune",
+      "type": "idle",
+      "afterMs": 120000,
+      "action": "idle-soft-tune",
+      "oncePerIdle": true
+    },
+    {
+      "id": "weekday-morning-window",
+      "type": "daily-window",
+      "action": "weekday-greeting",
+      "startTime": "08:00",
+      "endTime": "09:30",
+      "weekdays": [1, 2, 3, 4, 5],
+      "catchUpMs": 5400000,
+      "enterPet": true
+    },
+    {
+      "id": "weekend-morning-window",
+      "type": "daily-window",
+      "action": "weekend-greeting",
+      "startTime": "09:30",
+      "endTime": "11:30",
+      "weekdays": [6, 7],
+      "catchUpMs": 7200000,
+      "enterPet": true
+    },
+    {
+      "id": "friday-release",
+      "type": "schedule",
+      "action": "friday-release",
+      "time": "18:00",
+      "weekdays": [5],
+      "catchUpMs": 14400000,
+      "enterPet": true
+    },
+    {
+      "id": "labor-day-greeting",
+      "type": "schedule",
+      "action": "labor-day-greeting",
+      "time": "11:45",
+      "dates": ["*-05-01"],
+      "catchUpMs": 28800000,
+      "enterPet": true
+    },
+    {
+      "id": "holiday-late-morning",
+      "type": "schedule",
+      "action": "holiday-greeting",
+      "time": "11:45",
+      "dates": ["*-01-01", "*-10-01"],
+      "catchUpMs": 28800000,
+      "enterPet": true
+    },
+    {
+      "id": "qin-hover-glissando",
+      "type": "pointer",
+      "action": "glissando",
+      "event": "hover",
+      "area": "qin",
+      "holdMs": 900
+    }
+  ]
+}

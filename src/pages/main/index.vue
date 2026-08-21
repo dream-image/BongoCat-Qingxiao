@@ -3,7 +3,7 @@ import type { MotionInfo } from 'easy-live2d'
 
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { PhysicalSize } from '@tauri-apps/api/dpi'
-import { Menu, PredefinedMenuItem } from '@tauri-apps/api/menu'
+import { Menu } from '@tauri-apps/api/menu'
 import { sep } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { exists, readDir } from '@tauri-apps/plugin-fs'
@@ -16,6 +16,7 @@ import { useAppMenu } from '@/composables/useAppMenu'
 import { useDevice } from '@/composables/useDevice'
 import { useGamepad } from '@/composables/useGamepad'
 import { useModel } from '@/composables/useModel'
+import { usePetActionMenu } from '@/composables/usePetActionMenu'
 import { usePetPointer } from '@/composables/usePetPointer'
 import { useTauriListen } from '@/composables/useTauriListen'
 import { LISTEN_KEY } from '@/constants'
@@ -38,6 +39,7 @@ const petPointer = usePetPointer(
 )
 const catStore = useCatStore()
 const { getBaseMenu, getExitMenu } = useAppMenu()
+const { beginPetActionMenu } = usePetActionMenu()
 const modelStore = useModelStore()
 const generalStore = useGeneralStore()
 const resizing = ref(false)
@@ -46,6 +48,7 @@ const { stickActive } = useGamepad()
 // 模型加载和窗口重绘各自判代次，旧异步结果不能重新打开 rendererReady 门禁。
 let modelLoadGeneration = 0
 let resizeGeneration = 0
+const CONTEXT_MENU_ID = 'bongocat.main-context-menu'
 
 onMounted(startListening)
 
@@ -209,6 +212,11 @@ watch(() => catStore.model.maxFPS, modelRuntime.setMaxFPS, { immediate: true })
 
 watch(() => catStore.model.mirror, modelRuntime.setMirrored, { immediate: true })
 
+watch(() => generalStore.appearance.language, (locale) => {
+  // 模块菜单和下一句对白在运行时解析语言；切换语言无需重载模型或打断当前动作。
+  if (locale) modelRuntime.updatePetRuntimeContext({ locale })
+}, { immediate: true })
+
 useTauriListen<MotionInfo>(LISTEN_KEY.START_MOTION, ({ payload }) => {
   modelRuntime.startMotion(payload)
 })
@@ -236,25 +244,42 @@ async function handleContextmenu(event: MouseEvent) {
 
   if (event.shiftKey) return
 
-  const menu = await Menu.new({
-    items: [
-      ...await getBaseMenu({ includeAlwaysOnTop: true }),
-      await PredefinedMenuItem.new({ item: 'Separator' }),
-      ...await getExitMenu(),
-    ],
-  })
+  // 原生菜单会接管后续 pointer 事件；提前清空命中状态，避免错过 pointerup 后宠物一直保持按下。
+  petPointer.reset()
 
-  // Temporarily disable always-on-top on Windows so the context menu is not covered
-  if (isWindows && catStore.window.alwaysOnTop) {
-    setAlwaysOnTop(false)
+  const petActionMenu = await beginPetActionMenu()
+  const temporarilyLowered = isWindows && catStore.window.alwaysOnTop
+  let menu: Menu | undefined
+
+  try {
+    menu = await Menu.new({
+      // 固定 root id 保持原生事件身份稳定；整棵树使用 raw options，关闭 root 即可统一释放 channel。
+      id: CONTEXT_MENU_ID,
+      items: [
+        ...getBaseMenu({ includeAlwaysOnTop: true }),
+        { item: 'Separator' },
+        petActionMenu.item,
+        { item: 'Separator' },
+        ...getExitMenu(),
+      ],
+    })
+
+    // Windows 的置顶窗口可能盖住原生菜单，popup 期间临时降低，结束后按最新设置恢复。
+    if (temporarilyLowered) setAlwaysOnTop(false)
+
+    await menu.popup()
+  } finally {
+    try {
+      petActionMenu.end()
+    } finally {
+      try {
+        await menu?.close()
+      } finally {
+        // close 失败也不能让 Windows 窗口永久丢失原有置顶状态。
+        if (temporarilyLowered && catStore.window.alwaysOnTop) setAlwaysOnTop(true)
+      }
+    }
   }
-
-  await menu.popup()
-
-  // Restore always-on-top after the menu is closed
-  if (!isWindows || !catStore.window.alwaysOnTop) return
-
-  setAlwaysOnTop(true)
 }
 
 function handleMouseMove(event: MouseEvent) {

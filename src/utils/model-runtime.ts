@@ -3,6 +3,7 @@ import type { MotionInfo } from 'easy-live2d'
 import type { ModelRenderer } from '@/stores/model'
 
 import type { PetBehaviorRuntimeContext, PetInteractionInput, PetPoint } from './pet-behavior'
+import type { PetPassiveActivitySignal } from './pet-behavior-passive'
 
 import live2d from './live2d'
 import { PetBehaviorController } from './pet-behavior'
@@ -15,6 +16,8 @@ class ModelRuntime {
   private loadGeneration = 0
   private petExitGeneration = 0
   private pendingSpriteBinding: string | undefined
+  // 菜单期间按下的物理键仍需成对记账，但必须与可渲染绑定隔离到 release 到来为止。
+  private readonly menuSuppressedKeyboardInputs = new Set<string>()
   // inputId 表示物理输入身份，value 表示当前模型映射出的动画键。二者分离后，切模型时可以
   // 保留“仍按住”的事实，再用新模型配置重映射，而不会伪造一次新的按键和气泡。
   private readonly activeKeyboardInputs = new Map<string, string | undefined>()
@@ -22,6 +25,9 @@ class ModelRuntime {
   private readonly petBehavior = new PetBehaviorController(void 0, {
     driver: {
       play: (animation, options) => sprite.play(animation, options),
+      // 对话是独立于人物动作的单槽覆盖层；由行为代次负责决定何时显示，渲染器只负责绘制。
+      speak: payload => sprite.showSpeechBubble(payload),
+      clearSpeech: () => sprite.clearSpeechBubble(),
     },
   })
 
@@ -51,7 +57,8 @@ class ModelRuntime {
 
     sprite.setMirrored(this.mirrored)
     // 行为控制器依赖当前精灵模型的动画名，因此必须等资源和配置完整校验后再启动。
-    this.petBehavior.configure(result.petBehavior, result.defaultAnimation)
+    // canonical 模型路径同时是被动事件 scope：切回同一模型不会把 startup/当日窗口伪造成新事件。
+    this.petBehavior.configure(result.petBehavior, result.defaultAnimation, path)
     this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
     this.petBehavior.start()
 
@@ -102,6 +109,7 @@ class ModelRuntime {
     trackInput = true,
     inputId = key,
   ) {
+    const wasInputActive = this.activeKeyboardInputs.has(inputId)
     let renderKey = key
     let shouldReleaseRenderState = true
 
@@ -136,6 +144,32 @@ class ModelRuntime {
       if (!pressed && !shouldReleaseRenderState) return result
 
       sprite.handleKeyboard(renderKey, pressed, label ?? void 0)
+
+      return result
+    }
+
+    if (pressed && this.petBehavior.isActionMenuOpen) {
+      // 原生菜单导航键不是模型操作；保留物理 held 事实，但不显示气泡或抢播人物动画。
+      if (!wasInputActive) {
+        this.menuSuppressedKeyboardInputs.add(inputId)
+        this.petBehavior.notifyKeyboardPress(inputId)
+      }
+
+      // key repeat 会先经过上方通用映射逻辑；每次都重写为 undefined，
+      // 否则第二个重复 down 会把菜单方向键偷偷加回人物按键贴图。
+      if (this.menuSuppressedKeyboardInputs.has(inputId)) {
+        this.activeKeyboardInputs.set(inputId, void 0)
+      }
+
+      result.renderStateChanged = false
+
+      return result
+    }
+
+    if (!pressed && this.menuSuppressedKeyboardInputs.delete(inputId)) {
+      if (trackInput) this.petBehavior.notifyKeyboardRelease(inputId)
+
+      result.renderStateChanged = false
 
       return result
     }
@@ -181,7 +215,7 @@ class ModelRuntime {
     return result
   }
 
-  public setKeyboardInputActive(inputId: string, active: boolean) {
+  public setKeyboardInputActive(inputId: string, active: boolean, recordActivity = true) {
     // 输入监听可先于模型按键映射建立；undefined 仍代表真实按住，必须阻止空闲宠物激活。
     if (active) {
       if (!this.activeKeyboardInputs.has(inputId)) {
@@ -189,6 +223,15 @@ class ModelRuntime {
       }
     } else {
       this.activeKeyboardInputs.delete(inputId)
+    }
+
+    // 账本同步与真实用户操作可能共用此入口；recordActivity 明确控制是否生成被动触发信号。
+    if (recordActivity) {
+      this.petBehavior.notifyPassiveActivity({
+        inputId,
+        phase: active ? 'start' : 'end',
+        source: inputId.startsWith('Gamepad:') ? 'gamepad' : 'keyboard',
+      })
     }
 
     this.petBehavior.syncActiveKeyboardInputs(this.activeKeyboardInputs.keys())
@@ -241,6 +284,12 @@ class ModelRuntime {
   }
 
   public handleMouse(button: string, pressed: boolean) {
+    this.petBehavior.notifyPassiveActivity({
+      inputId: `Mouse:${button}`,
+      phase: pressed ? 'start' : 'end',
+      source: 'mouse',
+    })
+
     if (this.renderer !== 'sprite') return
     if (this.petBehavior.isPetActive) {
       // 宠物形态下鼠标由命中区状态机处理，但 release 仍要清掉进入宠物前遗留的循环动作。
@@ -268,6 +317,14 @@ class ModelRuntime {
     }
   }
 
+  public notifyPetPassiveActivity(signal: PetPassiveActivitySignal) {
+    this.petBehavior.notifyPassiveActivity(signal)
+  }
+
+  public setPetPresenceVisible(visible: boolean) {
+    this.petBehavior.setPresenceVisible(visible)
+  }
+
   public hitTestPetPointer(point: PetPoint) {
     if (this.renderer !== 'sprite' || !this.petBehavior.isPetActive) return []
 
@@ -290,6 +347,23 @@ class ModelRuntime {
     if (this.renderer !== 'sprite') return false
 
     return this.petBehavior.dispatchInteraction(input)
+  }
+
+  public beginPetActionMenu(locale: string) {
+    if (this.renderer !== 'sprite') return null
+
+    // 原生菜单打开期间暂停被动定时器；revision 可让旧菜单回调在切模型后安全失效。
+    return this.petBehavior.beginActionMenu(locale)
+  }
+
+  public selectPetActionMenuAction(revision: number, triggerId: string) {
+    if (this.renderer !== 'sprite') return false
+
+    return this.petBehavior.selectActionMenuItem(revision, triggerId)
+  }
+
+  public endPetActionMenu(revision: number) {
+    return this.petBehavior.endActionMenu(revision)
   }
 
   public readonly setMotionSoundEnabled = (enabled: boolean) => {
@@ -322,6 +396,8 @@ class ModelRuntime {
     this.petExitGeneration++
     this.pendingSpriteBinding = void 0
     this.pressedSpriteBindings.clear()
+    // 切模/销毁后旧菜单的 release 不应继续命中特殊分支，否则会污染新模型的输入账本。
+    this.menuSuppressedKeyboardInputs.clear()
   }
 
   private async playPendingBindingAfterPetExit(generation: number) {
@@ -373,6 +449,7 @@ class ModelRuntime {
   }
 
   private canReceivePetPointer() {
+    // 只有稳定的宠物态能接收指针；进出场过渡和正在交互时禁止重入，避免替换当前手势。
     return this.petBehavior.state === 'pet-idle'
       || this.petBehavior.state === 'pet-action'
   }

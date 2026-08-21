@@ -18,7 +18,7 @@
       "columns": 3,
       "fps": 8,
       "loop": true,
-      "frameDurations": [80, 80, 80, 2400, 80, 80]
+      "frameDurations": [4200, 100, 55, 45, 55, 120]
     },
     "pluck-01": {
       "file": "sprites/pluck-01.webp",
@@ -129,6 +129,175 @@
       "fps": 16,
       "loop": false,
       "frameDurations": [70, 60, 60, 60, 60, 60, 70, 180, 180, 70, 60, 60, 60, 60, 60, 90]
+    },
+    "pet-enter": {
+      "file": "sprites/pet-enter.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [100, 120, 140, 160, 190, 190, 160, 140]
+    },
+    "pet-idle": {
+      "file": "sprites/pet-idle.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [380, 380, 380, 380, 380, 380, 380, 380, 380, 380, 80, 380]
+    },
+    "pet-exit": {
+      "file": "sprites/pet-exit.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [140, 160, 190, 190, 160, 140, 120, 100]
+    },
+    "pet-doze": {
+      "file": "sprites/pet-doze.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [100, 120, 150, 180, 220, 300, 300, 220, 180, 150, 120, 100]
+    },
+    "pet-dream": {
+      "file": "sprites/pet-dream.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [110, 140, 170, 210, 270, 360, 360, 270, 210, 170, 140, 110]
+    },
+    "pet-chime": {
+      "file": "sprites/pet-chime.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+    },
+    "pet-curious": {
+      "file": "sprites/pet-curious.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+    },
+    "pet-content": {
+      "file": "sprites/pet-content.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+    }
+  },
+  "behaviors": {
+    "pet": {
+      "activationDelayMs": 15000,
+      "enterAnimation": "pet-enter",
+      "idleAnimation": "pet-idle",
+      "exitAnimation": "pet-exit",
+      "modules": [
+        {
+          "source": "modules/lively/module.json",
+          "enabled": true
+        },
+        {
+          "source": "modules/tsundere/module.json",
+          "enabled": true
+        },
+        {
+          "source": "modules/routine/module.json",
+          "enabled": true
+        }
+      ],
+      "hitAreas": {
+        "head": {
+          "shape": "ellipse",
+          "centerX": 256,
+          "centerY": 220,
+          "radiusX": 90,
+          "radiusY": 104
+        },
+        "qin": {
+          "shape": "polygon",
+          "points": [
+            { "x": 48, "y": 338 },
+            { "x": 392, "y": 342 },
+            { "x": 464, "y": 380 },
+            { "x": 464, "y": 418 },
+            { "x": 391, "y": 430 },
+            { "x": 72, "y": 402 },
+            { "x": 48, "y": 377 }
+          ]
+        }
+      },
+      "interactions": [
+        {
+          "id": "qingxiao-head-hover",
+          "event": "hover",
+          "area": "head",
+          "animation": "pet-curious",
+          "holdMs": 700,
+          "cooldownMs": 4500
+        },
+        {
+          "id": "qingxiao-head-tap",
+          "event": "tap",
+          "area": "head",
+          "animation": "pet-content",
+          "distance": 6,
+          "windowMs": 420,
+          "cooldownMs": 1800
+        },
+        {
+          "id": "qingxiao-head-stroke",
+          "event": "stroke",
+          "area": "head",
+          "animation": "pet-content",
+          "distance": 72,
+          "windowMs": 1200,
+          "cooldownMs": 2200
+        },
+        {
+          "id": "qingxiao-qin-tap",
+          "event": "tap",
+          "area": "qin",
+          "animation": "pet-chime",
+          "distance": 6,
+          "windowMs": 420,
+          "cooldownMs": 1400
+        },
+        {
+          "id": "qingxiao-qin-stroke",
+          "event": "stroke",
+          "area": "qin",
+          "animation": "pet-chime",
+          "distance": 68,
+          "windowMs": 1100,
+          "cooldownMs": 1000
+        }
+      ]
     }
   },
   "bindings": {

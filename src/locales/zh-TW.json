@@ -188,6 +188,11 @@
         "quitApp": "退出應用程式"
       }
     },
+    "usePetActionMenu": {
+      "title": "寵物互動",
+      "group": "主動動作",
+      "unavailable": "目前沒有可用動作"
+    },
     "useTray": {
       "checkUpdate": "檢查更新",
       "openSource": "開源網址"

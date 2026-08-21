@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "id": "routine",
+  "displayName": {
+    "zh-CN": "日常作息",
+    "en-US": "Routine"
+  },
+  "order": 30,
+  "actions": {
+    "content": {
+      "animation": "@model/pet-content",
+      "priority": 30,
+      "cooldownMs": 5000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2300,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "……再摸一下也行。",
+              "en-US": "...One more pat is fine."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "手还算温柔。",
+              "en-US": "Your touch is gentle enough."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "chime": {
+      "animation": "@model/pet-chime",
+      "priority": 28,
+      "cooldownMs": 10000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2300,
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "听见了吗？",
+              "en-US": "Did you hear that?"
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "琴音会记住你。",
+              "en-US": "The strings will remember you."
+            },
+            "weight": 3
+          }
+        ]
+      }
+    },
+    "ambient-chime": {
+      "animation": "@model/pet-chime",
+      "priority": 16,
+      "cooldownMs": 24000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.25,
+        "delayMs": 120,
+        "durationMs": 2000,
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "随手一曲。",
+              "en-US": "Just a passing tune."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "doze": {
+      "animation": "@model/pet-doze",
+      "priority": 12,
+      "cooldownMs": 16000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.25,
+        "delayMs": 160,
+        "durationMs": 2100,
+        "anchor": {
+          "x": 348,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "我只闭目片刻。",
+              "en-US": "I'm only resting my eyes."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "安静些。",
+              "en-US": "A little quieter."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "dream": {
+      "animation": "@model/pet-dream",
+      "priority": 14,
+      "cooldownMs": 22000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.35,
+        "delayMs": 180,
+        "durationMs": 2200,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云海很安静。",
+              "en-US": "The cloud sea is quiet."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "别吵醒我。",
+              "en-US": "Don't wake me."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "white-transform": {
+      "animation": "@model/transform",
+      "priority": 42,
+      "cooldownMs": 12000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 180,
+        "durationMs": 2400,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云气化形，莫要眨眼。",
+              "en-US": "Clouds take form. Don't blink."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "curious-after-pause": {
+      "animation": "@model/pet-curious",
+      "priority": 20,
+      "cooldownMs": 240000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.5,
+        "delayMs": 100,
+        "durationMs": 2100,
+        "anchor": { "x": 350, "y": 166 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "停下了？是在想什么？",
+              "en-US": "You stopped. What are you thinking about?"
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "嗯？这回又卡在哪里了。",
+              "en-US": "Hm? What has you stuck this time?"
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "doze-after-ten": {
+      "animation": "@model/pet-doze",
+      "priority": 14,
+      "cooldownMs": 600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.3,
+        "delayMs": 160,
+        "durationMs": 2100,
+        "anchor": { "x": 348, "y": 166 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "既然无事，我便闭目片刻。",
+              "en-US": "Since all is quiet, I'll rest my eyes for a moment."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "别误会，我没有睡着。",
+              "en-US": "Don't misunderstand. I am not asleep."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "dream-after-twenty": {
+      "animation": "@model/pet-dream",
+      "priority": 15,
+      "cooldownMs": 1200000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.35,
+        "delayMs": 180,
+        "durationMs": 2200,
+        "anchor": { "x": 350, "y": 166 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云海来接我了……只去一会儿。",
+              "en-US": "The cloud sea is calling... I'll only be gone a moment."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "若有琴声，再唤我。",
+              "en-US": "Wake me if the strings begin to sing."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "deep-dream-cycle": {
+      "animation": "@model/pet-dream",
+      "priority": 13,
+      "cooldownMs": 1440000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.2,
+        "delayMs": 180,
+        "durationMs": 2100,
+        "anchor": { "x": 350, "y": 166 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "这场梦还没弹完。",
+              "en-US": "This dream hasn't finished its song."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "云又来了……安静些。",
+              "en-US": "The clouds have returned... Be still."
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "midday-rest-window": {
+      "animation": "@model/pet-doze",
+      "priority": 19,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.8,
+        "delayMs": 150,
+        "durationMs": 2300,
+        "anchor": { "x": 348, "y": 166 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "午间宜静。你也歇一刻。",
+              "en-US": "Midday calls for quiet. Rest for a moment too."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "饭后别急着忙，先让心弦缓下来。",
+              "en-US": "Don't rush after lunch. Let your inner strings settle first."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "evening-chime-window": {
+      "animation": "@model/pet-chime",
+      "priority": 22,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.8,
+        "delayMs": 110,
+        "durationMs": 2300,
+        "anchor": { "x": 342, "y": 168 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "暮色到了。听完这一弦，再收拾今日。",
+              "en-US": "Dusk is here. Hear this note, then put the day in order."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "晚风正合弦音。你且听着。",
+              "en-US": "The evening wind suits the strings. Just listen."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    }
+  },
+  "triggers": [
+    {
+      "id": "manual-content",
+      "type": "manual",
+      "action": "content",
+      "label": {
+        "zh-CN": "摸摸她",
+        "en-US": "Pat her head"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 10,
+      "enterPet": true
+    },
+    {
+      "id": "manual-chime",
+      "type": "manual",
+      "action": "chime",
+      "label": {
+        "zh-CN": "请她弹琴",
+        "en-US": "Ask for a tune"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 20,
+      "enterPet": true
+    },
+    {
+      "id": "manual-dream",
+      "type": "manual",
+      "action": "dream",
+      "label": {
+        "zh-CN": "陪她小憩",
+        "en-US": "Share a quiet rest"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 30,
+      "enterPet": true
+    },
+    {
+      "id": "manual-white-transform",
+      "type": "manual",
+      "action": "white-transform",
+      "label": {
+        "zh-CN": "白色化形",
+        "en-US": "White transformation"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 40,
+      "enterPet": true
+    },
+    {
+      "id": "ambient-routine",
+      "type": "interval",
+      "delayMs": [180000, 360000],
+      "choices": [
+        {
+          "action": "ambient-chime",
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": "idle-curious-45-seconds",
+      "type": "idle",
+      "afterMs": 45000,
+      "action": "curious-after-pause",
+      "oncePerIdle": true
+    },
+    {
+      "id": "idle-doze-ten-minutes",
+      "type": "idle",
+      "afterMs": 600000,
+      "action": "doze-after-ten",
+      "oncePerIdle": true
+    },
+    {
+      "id": "idle-dream-twenty-minutes",
+      "type": "idle",
+      "afterMs": 1200000,
+      "action": "dream-after-twenty",
+      "oncePerIdle": true
+    },
+    {
+      "id": "idle-deep-dream-cycle",
+      "type": "idle",
+      "afterMs": 2400000,
+      "repeatMs": [1500000, 2400000],
+      "action": "deep-dream-cycle",
+      "oncePerIdle": false
+    },
+    {
+      "id": "midday-rest-window",
+      "type": "daily-window",
+      "action": "midday-rest-window",
+      "startTime": "12:00",
+      "endTime": "13:30",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "catchUpMs": 5400000,
+      "enterPet": true
+    },
+    {
+      "id": "evening-chime-window",
+      "type": "daily-window",
+      "action": "evening-chime-window",
+      "startTime": "19:30",
+      "endTime": "21:30",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "catchUpMs": 7200000,
+      "enterPet": true
+    }
+  ]
+}

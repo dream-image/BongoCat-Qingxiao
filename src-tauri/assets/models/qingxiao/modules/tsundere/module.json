@@ -1,0 +1,407 @@
+{
+  "version": 1,
+  "id": "tsundere",
+  "displayName": {
+    "zh-CN": "高冷傲娇",
+    "en-US": "Tsundere"
+  },
+  "order": 20,
+  "animations": {
+    "remind": {
+      "file": "sprites/pet-remind.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [75, 90, 105, 125, 160, 240, 240, 160, 125, 105, 90, 75]
+    },
+    "hmph": {
+      "file": "sprites/pet-hmph.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [90, 120, 150, 190, 260, 330, 330, 260, 190, 150, 120, 90]
+    }
+  },
+  "actions": {
+    "remind": {
+      "animation": "remind",
+      "priority": 45,
+      "cooldownMs": 60000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2500,
+        "anchor": {
+          "x": 350,
+          "y": 158
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "该休息了。",
+              "en-US": "Time for a break."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "别让我再提醒。",
+              "en-US": "Don't make me repeat myself."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "还不睡？",
+              "en-US": "Still awake?"
+            },
+            "weight": 1
+          }
+        ]
+      }
+    },
+    "hmph": {
+      "animation": "hmph",
+      "priority": 34,
+      "cooldownMs": 12000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2300,
+        "anchor": {
+          "x": 352,
+          "y": 170
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "哼。",
+              "en-US": "Hmph."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "才没有在等你。",
+              "en-US": "I wasn't waiting for you."
+            },
+            "weight": 2
+          },
+          {
+            "text": {
+              "zh-CN": "有事直说。",
+              "en-US": "Say what you want."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "short-return-hmph": {
+      "animation": "hmph",
+      "priority": 36,
+      "cooldownMs": 21600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2400,
+        "anchor": { "x": 352, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "才二十分钟就回来找我？……随你。",
+              "en-US": "Back for me after only twenty minutes? ...Suit yourself."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "总算回来了。我可没在数时辰。",
+              "en-US": "You're finally back. I wasn't counting the hours."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "mouse-fuss": {
+      "animation": "hmph",
+      "priority": 32,
+      "cooldownMs": 600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.85,
+        "delayMs": 100,
+        "durationMs": 2200,
+        "anchor": { "x": 352, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "晃来晃去，你的手不累么？",
+              "en-US": "Back and forth—doesn't your hand get tired?"
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "安分一点。晃得琴弦都烦了。",
+              "en-US": "Settle down. Even the strings are annoyed by all that motion."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "work-break-reminder": {
+      "animation": "remind",
+      "priority": 46,
+      "cooldownMs": 2700000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2600,
+        "anchor": { "x": 350, "y": 158 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "五十分钟了。起来走走——不是在担心你。",
+              "en-US": "Fifty minutes. Get up and walk—I'm not worried about you."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "眼睛离远些。你若累坏，反倒扰我清静。",
+              "en-US": "Rest your eyes. If you wear yourself out, you'll disturb my peace."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "idle-hmph": {
+      "animation": "hmph",
+      "priority": 20,
+      "cooldownMs": 600000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.45,
+        "delayMs": 120,
+        "durationMs": 2100,
+        "anchor": { "x": 352, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "安静得过分了。……我只是随口一说。",
+              "en-US": "It's far too quiet. ...Just an observation."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "发呆可以，别把我也忘了。",
+              "en-US": "Daydream if you must, but don't forget I'm here."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "weekday-afternoon-hmph": {
+      "animation": "hmph",
+      "priority": 31,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 0.9,
+        "delayMs": 100,
+        "durationMs": 2300,
+        "anchor": { "x": 352, "y": 170 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "午后最容易松懈。别让我抓到。",
+              "en-US": "Afternoons invite carelessness. Don't let me catch you slacking."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "困了就喝口水，逞强可不算本事。",
+              "en-US": "If you're sleepy, drink some water. Stubbornness isn't a talent."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "monday-afternoon-reminder": {
+      "animation": "remind",
+      "priority": 37,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2400,
+        "anchor": { "x": 350, "y": 158 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "周一也没什么可怕的。跟上我的拍子。",
+              "en-US": "Monday is nothing to fear. Keep pace with me."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "才周一就没精神？坐直。",
+              "en-US": "Already wilting on Monday? Sit up straight."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    },
+    "midnight-reminder": {
+      "animation": "remind",
+      "priority": 44,
+      "cooldownMs": 72000000,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 100,
+        "durationMs": 2600,
+        "anchor": { "x": 350, "y": 158 },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "夜深了。再不收琴，我替你合上。",
+              "en-US": "It's late. If you won't stop, I'll close the instrument for you."
+            },
+            "weight": 3
+          },
+          {
+            "text": {
+              "zh-CN": "我没有催你睡，只是不想听你明日喊困。",
+              "en-US": "I'm not sending you to bed. I just don't want to hear you complain tomorrow."
+            },
+            "weight": 2
+          }
+        ]
+      }
+    }
+  },
+  "triggers": [
+    {
+      "id": "manual-remind",
+      "type": "manual",
+      "action": "remind",
+      "label": {
+        "zh-CN": "提醒我休息",
+        "en-US": "Remind me to rest"
+      },
+      "group": {
+        "zh-CN": "高冷傲娇",
+        "en-US": "Tsundere"
+      },
+      "order": 10,
+      "enterPet": true
+    },
+    {
+      "id": "manual-hmph",
+      "type": "manual",
+      "action": "hmph",
+      "label": {
+        "zh-CN": "傲娇轻哼",
+        "en-US": "A haughty hmph"
+      },
+      "group": {
+        "zh-CN": "高冷傲娇",
+        "en-US": "Tsundere"
+      },
+      "order": 20,
+      "enterPet": true
+    },
+    {
+      "id": "return-within-day",
+      "type": "visibility-return",
+      "action": "short-return-hmph",
+      "minAwayMs": 1200000,
+      "maxAwayMs": 21600000,
+      "settleMs": 1500,
+      "catchUpMs": 30000,
+      "enterPet": true
+    },
+    {
+      "id": "mouse-fuss",
+      "type": "activity-burst",
+      "action": "mouse-fuss",
+      "sources": ["mouse"],
+      "windowMs": 6000,
+      "minimumEvents": 8,
+      "quietMs": 1200,
+      "catchUpMs": 12000,
+      "enterPet": true
+    },
+    {
+      "id": "focused-work-reminder",
+      "type": "active-session",
+      "action": "work-break-reminder",
+      "sources": ["keyboard", "mouse", "gamepad"],
+      "afterMs": 3000000,
+      "resetAfterMs": 480000,
+      "repeatMs": 3000000,
+      "quietMs": 4000,
+      "catchUpMs": 60000,
+      "enterPet": true
+    },
+    {
+      "id": "idle-hmph-five-minutes",
+      "type": "idle",
+      "afterMs": 300000,
+      "action": "idle-hmph",
+      "oncePerIdle": true
+    },
+    {
+      "id": "weekday-afternoon-window",
+      "type": "daily-window",
+      "action": "weekday-afternoon-hmph",
+      "startTime": "14:00",
+      "endTime": "16:30",
+      "weekdays": [2, 3, 4, 5],
+      "catchUpMs": 9000000,
+      "enterPet": true
+    },
+    {
+      "id": "monday-afternoon-window",
+      "type": "daily-window",
+      "action": "monday-afternoon-reminder",
+      "startTime": "14:00",
+      "endTime": "16:30",
+      "weekdays": [1],
+      "catchUpMs": 9000000,
+      "enterPet": true
+    },
+    {
+      "id": "late-night-window",
+      "type": "daily-window",
+      "action": "midnight-reminder",
+      "startTime": "23:00",
+      "endTime": "00:30",
+      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "catchUpMs": 5400000,
+      "enterPet": true
+    }
+  ]
+}

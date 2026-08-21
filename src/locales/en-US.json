@@ -188,6 +188,11 @@
         "quitApp": "Quit App"
       }
     },
+    "usePetActionMenu": {
+      "title": "Pet Interactions",
+      "group": "Actions",
+      "unavailable": "No actions available"
+    },
     "useTray": {
       "checkUpdate": "Check for Updates",
       "openSource": "Open Source"

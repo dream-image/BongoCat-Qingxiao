@@ -3,6 +3,7 @@ import type { PhysicalPosition } from '@tauri-apps/api/dpi'
 import { LogicalSize } from '@tauri-apps/api/dpi'
 import { resolveResource, sep } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { error as logError } from '@tauri-apps/plugin-log'
 import { message } from 'antdv-next'
 import { isNil, round } from 'es-toolkit'
 import { findKey, nth } from 'es-toolkit/compat'
@@ -18,6 +19,8 @@ import modelRuntime from '../utils/model-runtime'
 const appWindow = getCurrentWebviewWindow()
 const digitKeys = '1234567890'.split('') as readonly string[]
 const letterKeys = 'QWERTYUIOPASDFGHJKLZXCVBNM'.split('') as readonly string[]
+// 兜底只负责越过一次布局提交点，取较短上限可避免隐藏窗口恢复时出现可感知的加载延迟。
+const RESIZE_FRAME_FALLBACK_DELAY = 100
 
 export interface ModelSize {
   width: number
@@ -140,6 +143,21 @@ export function useModel() {
     } catch (error) {
       if (isAbortError(error) || !isCurrent()) return false
 
+      const details = error instanceof Error
+        ? error.stack ?? error.message
+        : String(error)
+
+      // toast 在透明宠物窗口或锁屏期间不可见，持久日志必须保留真实加载错误供恢复诊断。
+      try {
+        await logError(`Failed to load model ${id} from ${path}: ${details}`)
+      } catch (logReason) {
+        // 记录失败不能遮蔽原始模型错误或制造新的未处理 Promise rejection。
+        console.error('Failed to write model loading error log:', logReason)
+      }
+
+      // 写日志期间用户可能已切换模型，旧失败不能再弹到新模型界面上。
+      if (!isCurrent()) return false
+
       message.error(String(error))
 
       return false
@@ -175,7 +193,24 @@ export function useModel() {
     }
 
     await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve())
+      let settled = false
+      let frameId: number | undefined
+      let fallback: ReturnType<typeof setTimeout> | undefined
+      // rAF 与 fallback 竞争同一幂等出口，确保只 resolve 一次并清理输掉竞态的一方。
+      const finish = () => {
+        if (settled) return
+
+        settled = true
+
+        if (frameId !== undefined) cancelAnimationFrame(frameId)
+        if (fallback !== undefined) clearTimeout(fallback)
+
+        resolve()
+      }
+      // 锁屏或隐藏 WebView 会暂停 rAF；定时兜底避免模型永远卡在未就绪状态。
+      fallback = setTimeout(finish, RESIZE_FRAME_FALLBACK_DELAY)
+
+      frameId = requestAnimationFrame(finish)
     })
 
     if (generation !== loadGeneration) return false
@@ -209,9 +244,9 @@ export function useModel() {
 
   const handlePress = (key: string, label?: string | null, inputId = key) => {
     // inputId 表示真实输入源，renderKey 表示当前模型采用的贴图键，两者不能混为一谈。
-    const { key: renderKey } = modelRuntime.handleKeyboard(key, true, label, true, inputId)
+    const result = modelRuntime.handleKeyboard(key, true, label, true, inputId)
 
-    setPressedRenderKey(renderKey)
+    if (result.renderStateChanged) setPressedRenderKey(result.key)
   }
 
   const syncPressedRenderKeys = (renderKeys: Iterable<string>) => {
