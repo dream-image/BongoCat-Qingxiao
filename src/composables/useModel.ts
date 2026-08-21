@@ -30,6 +30,8 @@ export interface ModelSize {
   height: number
 }
 
+export type ModelLoadOutcome = 'failed' | 'loaded' | 'superseded'
+
 export function useModel() {
   const modelStore = useModelStore()
   const catStore = useCatStore()
@@ -74,7 +76,7 @@ export function useModel() {
     return `${modelId}:expression:${index}`
   }
 
-  async function handleLoad() {
+  async function handleLoad(): Promise<ModelLoadOutcome> {
     const generation = ++loadGeneration
     const currentModel = modelStore.currentModel
 
@@ -84,7 +86,7 @@ export function useModel() {
     modelStore.currentMotions = []
     modelStore.currentExpressions = []
 
-    if (!currentModel) return false
+    if (!currentModel) return 'failed'
 
     const { id, path, renderer } = currentModel
     // 不只比较代次，也比较模型身份，防止对象被原地更新时旧结果误提交。
@@ -100,11 +102,11 @@ export function useModel() {
     try {
       await resolveResource(path)
 
-      if (!isCurrent()) return false
+      if (!isCurrent()) return 'superseded'
 
       const { width, height, motions, expressions } = await modelRuntime.load(path, renderer)
 
-      if (!isCurrent()) return false
+      if (!isCurrent()) return 'superseded'
 
       const nextMotions = Object.entries(motions)
       const nextModelSize = { width, height }
@@ -149,7 +151,7 @@ export function useModel() {
         nextShortcuts.push([id, shortcut])
       }
 
-      if (!isCurrent()) return false
+      if (!isCurrent()) return 'superseded'
 
       modelSize.value = nextModelSize
       modelStore.currentMotions = nextMotions
@@ -159,11 +161,13 @@ export function useModel() {
         modelStore.shortcuts[shortcutId] = shortcut
       }
 
-      if (!await handleResize(generation, nextModelSize)) return false
+      if (!await handleResize(generation, nextModelSize)) {
+        return isCurrent() ? 'failed' : 'superseded'
+      }
 
-      return isCurrent()
+      return isCurrent() ? 'loaded' : 'superseded'
     } catch (error) {
-      if (isAbortError(error) || !isCurrent()) return false
+      if (isAbortError(error) || !isCurrent()) return 'superseded'
 
       const details = error instanceof Error
         ? error.stack ?? error.message
@@ -178,11 +182,11 @@ export function useModel() {
       }
 
       // 写日志期间用户可能已切换模型，旧失败不能再弹到新模型界面上。
-      if (!isCurrent()) return false
+      if (!isCurrent()) return 'superseded'
 
       message.error(String(error))
 
-      return false
+      return 'failed'
     }
   }
 

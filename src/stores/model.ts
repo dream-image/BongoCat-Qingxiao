@@ -1,15 +1,20 @@
 import type { ExpressionInfo, MotionInfo } from 'easy-live2d'
 
 import { resolveResource } from '@tauri-apps/api/path'
-import { readDir, readTextFile } from '@tauri-apps/plugin-fs'
-import { filter } from 'es-toolkit/compat'
+import { readDir } from '@tauri-apps/plugin-fs'
 import { defineStore } from 'pinia'
 import { reactive, ref } from 'vue'
 
+import type {
+  ValidatedModelMode,
+  ValidatedModelRenderer,
+} from '@/utils/model-validation'
+
+import { MODEL_MODES, validateModelDirectory } from '@/utils/model-validation'
 import { join } from '@/utils/path'
 
-export type ModelMode = 'standard' | 'keyboard' | 'gamepad'
-export type ModelRenderer = 'live2d' | 'sprite'
+export type ModelMode = ValidatedModelMode
+export type ModelRenderer = ValidatedModelRenderer
 
 export interface Model {
   id: string
@@ -18,13 +23,6 @@ export interface Model {
   renderer: ModelRenderer
   displayName?: string
   isPreset: boolean
-}
-
-interface SpriteModelManifest {
-  id?: unknown
-  displayName?: unknown
-  mode?: unknown
-  renderer?: unknown
 }
 
 export const useModelStore = defineStore('model', () => {
@@ -50,31 +48,27 @@ export const useModelStore = defineStore('model', () => {
         }
       : void 0
 
-    const customModels = filter(previousModels, { isPreset: false })
-    const previousPresetModels = filter(previousModels, { isPreset: true })
-    const modes: ModelMode[] = ['gamepad', 'keyboard', 'standard']
+    const previousCustomModels = previousModels.filter(model => !model.isPreset)
+    const previousPresetModels = previousModels.filter(model => model.isPreset)
 
     const spriteModels: Model[] = []
     const spriteIds = new Set<string>()
     const entries = await readDir(modelsPath).catch(() => [])
 
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-      if (!entry.isDirectory || modes.includes(entry.name as ModelMode)) continue
+      if (!entry.isDirectory || MODEL_MODES.includes(entry.name as ModelMode)) continue
 
       const path = join(modelsPath, entry.name)
 
       try {
-        const manifest = JSON.parse(
-          await readTextFile(join(path, 'model.json')),
-        ) as SpriteModelManifest
+        const validated = await validateModelDirectory(path, {
+          spriteDefaultMode: 'keyboard',
+        })
 
-        if (manifest.renderer !== 'sprite') continue
+        if (validated.renderer !== 'sprite') continue
 
-        const mode = modes.includes(manifest.mode as ModelMode)
-          ? manifest.mode as ModelMode
-          : 'keyboard'
-        const manifestId = typeof manifest.id === 'string' && manifest.id.trim()
-          ? manifest.id.trim()
+        const manifestId = validated.id?.trim()
+          ? validated.id.trim()
           : entry.name
 
         if (spriteIds.has(manifestId)) continue
@@ -83,11 +77,9 @@ export const useModelStore = defineStore('model', () => {
 
         spriteModels.push({
           id: `preset-sprite-${manifestId}`,
-          mode,
+          mode: validated.mode,
           renderer: 'sprite',
-          displayName: typeof manifest.displayName === 'string'
-            ? manifest.displayName
-            : entry.name,
+          displayName: validated.displayName ?? entry.name,
           isPreset: true,
           path,
         })
@@ -96,13 +88,46 @@ export const useModelStore = defineStore('model', () => {
       }
     }
 
-    const live2dModels = modes.slice().reverse().map<Model>(mode => ({
-      id: `preset-live2d-${mode}`,
-      mode,
-      renderer: 'live2d',
-      isPreset: true,
-      path: join(modelsPath, mode),
-    }))
+    const live2dModels: Model[] = []
+
+    for (const mode of MODEL_MODES.slice().reverse()) {
+      const path = join(modelsPath, mode)
+
+      try {
+        const validated = await validateModelDirectory(path)
+
+        if (validated.renderer !== 'live2d') continue
+
+        live2dModels.push({
+          id: `preset-live2d-${mode}`,
+          mode,
+          renderer: 'live2d',
+          isPreset: true,
+          path,
+        })
+      } catch {
+        continue
+      }
+    }
+
+    const customModels: Model[] = []
+
+    // 持久化记录只是索引；启动时必须以当前落盘内容重建渲染类型和模式，失效目录不能重新进入模型列表。
+    for (const previous of previousCustomModels) {
+      try {
+        const validated = await validateModelDirectory(previous.path)
+
+        customModels.push({
+          ...previous,
+          mode: validated.mode,
+          renderer: validated.renderer,
+          displayName: validated.displayName ?? previous.displayName,
+        })
+      } catch {
+        continue
+      }
+    }
+
     const nextModels = [...spriteModels, ...live2dModels, ...customModels]
 
     for (const previous of previousPresetModels) {

@@ -13,6 +13,7 @@ import { round } from 'es-toolkit'
 import { nth } from 'es-toolkit/compat'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 
+import type { Model } from '@/stores/model'
 import type {
   PetActionCatalogRequest,
   PetActionCatalogResponse,
@@ -57,6 +58,62 @@ const { stickActive } = useGamepad()
 let modelLoadGeneration = 0
 let resizeGeneration = 0
 const CONTEXT_MENU_ID = 'bongocat.main-context-menu'
+let lastRenderedModel: Model | undefined
+let recoveryState: {
+  expectedModelKey: string
+  attemptedModelKeys: Set<string>
+} | undefined
+
+function getModelKey(model: Model) {
+  return `${model.id}\0${model.renderer}\0${model.path}`
+}
+
+function isSameModel(left: Model | undefined, right: Model) {
+  return left?.id === right.id
+    && left.renderer === right.renderer
+    && left.path === right.path
+}
+
+function recoverFromModelLoadFailure(model: Model, generation: number) {
+  if (generation !== modelLoadGeneration
+    || !isSameModel(modelStore.currentModel, model)) {
+    return
+  }
+
+  const failedKey = getModelKey(model)
+  const state = recoveryState?.expectedModelKey === failedKey
+    ? recoveryState
+    : {
+        expectedModelKey: failedKey,
+        attemptedModelKeys: new Set<string>(),
+      }
+
+  state.attemptedModelKeys.add(failedKey)
+  recoveryState = state
+
+  const renderedModel = lastRenderedModel
+  const previous = renderedModel
+    ? modelStore.models.find(item => isSameModel(item, renderedModel))
+    : undefined
+  const candidates = [
+    previous,
+    ...modelStore.models.filter(item => item.isPreset),
+  ].filter((item): item is Model => item !== undefined)
+  const nextModel = candidates.find((candidate) => {
+    return !state.attemptedModelKeys.has(getModelKey(candidate))
+  })
+
+  if (nextModel) {
+    // expectedModelKey 把自动回退链与用户的新选择区分开，旧失败不能回滚后来的点击。
+    state.expectedModelKey = getModelKey(nextModel)
+    modelStore.currentModel = nextModel
+
+    return
+  }
+
+  recoveryState = undefined
+  modelStore.currentModel = undefined
+}
 
 onMounted(startListening)
 
@@ -103,10 +160,24 @@ watch(() => modelStore.currentModel, async (model) => {
   clearObject([modelStore.supportKeys, modelStore.pressedKeys])
 
   if (!model) {
+    recoveryState = undefined
     handleDestroy()
+    // 没有任何可加载模型时结束过渡态，设置窗口仍可用于重新导入或修复模型。
+    modelStore.modelReady = true
 
     return
   }
+
+  const modelKey = getModelKey(model)
+
+  if (recoveryState?.expectedModelKey !== modelKey) {
+    recoveryState = {
+      expectedModelKey: modelKey,
+      attemptedModelKeys: new Set(),
+    }
+  }
+
+  recoveryState.attemptedModelKeys.add(modelKey)
 
   const { id, path: modelPath, renderer } = model
   // 深度 watch 可能在同一模型对象上触发，身份字段与代次一起核验才可靠。
@@ -119,11 +190,19 @@ watch(() => modelStore.currentModel, async (model) => {
       && current.renderer === renderer
   }
 
-  if (!await handleLoad() || !isCurrent()) return
+  const loadOutcome = await handleLoad()
+
+  if (loadOutcome !== 'loaded' || !isCurrent()) {
+    if (loadOutcome === 'failed' && isCurrent()) {
+      recoverFromModelLoadFailure(model, generation)
+    }
+
+    return
+  }
 
   const path = join(model.path, 'resources', 'background.png')
 
-  const existed = await exists(path)
+  const existed = await exists(path).catch(() => false)
   const nextBackgroundImagePath = existed ? convertFileSrc(path) : void 0
   const nextSupportKeys: Record<string, string> = {}
 
@@ -152,6 +231,8 @@ watch(() => modelStore.currentModel, async (model) => {
   // supportKeys 完整提交后才能重映射持续按住的键，否则会错误回退或丢贴图。
   remapPressedKeyboardInputs()
   modelStore.modelReady = true
+  lastRenderedModel = { ...model }
+  recoveryState = undefined
 
   // rendererReady 比 modelReady 更严格：窗口重绘期间仍保持关闭。
   if (!resizing.value) {
