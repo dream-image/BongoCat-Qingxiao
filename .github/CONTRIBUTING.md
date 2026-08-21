@@ -2,13 +2,16 @@
 
 非常感谢您对 BongoCat 的关注和贡献！在您提交贡献之前，请先花一些时间阅读以下指南，以确保您的贡献能够顺利进行。
 
+> [!NOTE]
+> 本仓库是 [ayangweb/BongoCat](https://github.com/ayangweb/BongoCat) 的开源修改版。清宵模型、宠物动作模组及本 fork 新增功能的问题请提交到 [dream-image/BongoCat Issues](https://github.com/dream-image/BongoCat/issues)；如果问题同样存在于未修改的上游版本，请优先反馈给上游项目。
+
 ## 透明的开发
 
 所有工作都在 GitHub 上公开进行。无论是核心团队成员还是外部贡献者的 Pull Request，都需要经过相同的 review 流程。
 
 ## 提交 Issue
 
-我们使用 [Github Issues](https://github.com/ayangweb/BongoCat/issues) 进行 Bug 报告和新 Feature 建议。在提交 Issue 之前，请确保已经搜索过类似的问题，因为它们可能已经得到解答或正在被修复。对于 Bug 报告，请包含可用于重现问题的完整步骤。对于新 Feature 建议，请指出你想要的更改以及期望的行为。
+我们使用 [GitHub Issues](https://github.com/dream-image/BongoCat/issues) 接收这个修改版的 Bug 报告和新 Feature 建议。在提交 Issue 之前，请确保已经搜索过类似问题，因为它们可能已经得到解答或正在被修复。对于 Bug 报告，请包含可用于重现问题的完整步骤、操作系统、模型名称和应用日志；对于新 Feature 建议，请指出想要的更改以及期望行为。
 
 ## 提交 Pull Request
 

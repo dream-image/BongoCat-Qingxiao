@@ -1,151 +1,103 @@
-![BongoCat](https://socialify.git.ci/ayangweb/BongoCat/image?custom_description=&description=1&font=Source+Code+Pro&forks=1&issues=1&logo=https%3A%2F%2Fgithub.com%2Fayangweb%2FBongoCat%2Fblob%2Fmaster%2Fsrc-tauri%2Fassets%2Flogo-mac.png%3Fraw%3Dtrue&name=1&owner=1&pattern=Floating+Cogs&pulls=1&stargazers=1&theme=Auto)
-
 <div align="center">
-  <div>
-    <a href="https://github.com/ayangweb/BongoCat/releases"><img alt="Windows" src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB0PSIxNzI2MzA1OTcxMDA2IiBjbGFzcz0iaWNvbiIgdmlld0JveD0iMCAwIDEwMjQgMTAyNCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHAtaWQ9IjE1NDgiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4Ij48cGF0aCBkPSJNNTI3LjI3NTU1MTYxIDk2Ljk3MTAzMDEzdjM3My45OTIxMDY2N2g0OTQuNTEzNjE5NzVWMTUuMDI2NzU3NTN6TTUyNy4yNzU1NTE2MSA5MjguMzIzNTA4MTVsNDk0LjUxMzYxOTc1IDgwLjUyMDI4MDQ5di00NTUuNjc3NDcxNjFoLTQ5NC41MTM2MTk3NXpNNC42NzA0NTEzNiA0NzAuODMzNjgyOTdINDIyLjY3Njg1OTI1VjExMC41NjM2ODE5N2wtNDE4LjAwNjQwNzg5IDY5LjI1Nzc5NzUzek00LjY3MDQ1MTM2IDg0Ni43Njc1OTcwM0w0MjIuNjc2ODU5MjUgOTE0Ljg2MDMxMDEzVjU1My4xNjYzMTcwM0g0LjY3MDQ1MTM2eiIgcC1pZD0iMTU0OSIgZmlsbD0iI2ZmZmZmZiI+PC9wYXRoPjwvc3ZnPg==" /></a>
-    <a href="https://github.com/ayangweb/BongoCat/releases"><img alt="MacOS" src="https://img.shields.io/badge/-MacOS-black?style=flat-square&logo=apple&logoColor=white" /></a>
-    <a href="https://github.com/ayangweb/BongoCat/releases"><img alt="Linux" src="https://img.shields.io/badge/-Linux-yellow?style=flat-square&logo=linux&logoColor=white" /></a>
-  </div>
+  <img src="./src-tauri/assets/models/qingxiao/resources/cover.png" alt="清宵桌宠预览" width="612" />
+
+  <h1>BongoCat · 清宵桌宠扩展版</h1>
+
+  <p>一款支持 macOS、Windows 和 Linux（X11）的开源跨平台互动桌宠。</p>
+  <p>在 BongoCat 原有键鼠、手柄响应和模型导入能力之上，增加清宵雪碧图模型、模块化宠物动作、主动/被动触发器、右键交互菜单与对白气泡。</p>
 
   <p>
-    <a href="./LICENSE"><img src="https://img.shields.io/github/license/ayangweb/BongoCat?style=flat-square" /></a>
-    <a href="https://github.com/ayangweb/BongoCat/releases/latest"><img src="https://img.shields.io/github/package-json/v/ayangweb/BongoCat?style=flat-square"/></a>
-    <a href="https://github.com/ayangweb/BongoCat/releases"><img src="https://img.shields.io/github/downloads/ayangweb/BongoCat/total?style=flat-square"/></a>
-  </p>
-
-  <p>
-    <a href="https://trendshift.io/developers/8507" target="_blank"><img src="https://trendshift.io/api/badge/developers/8507" alt="ayangweb | Trendshift" width="250" height="55" /></a>
-    <a href="https://trendshift.io/repositories/14605" target="_blank"><img src="https://trendshift.io/api/badge/repositories/14605" alt="ayangweb%2FBongoCat | Trendshift" width="250" height="55" /></a>
-    <a href="https://hellogithub.com/repository/7d23863fd4be47b39e816193ded385c9" target="_blank">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=7d23863fd4be47b39e816193ded385c9&claim_uid=5ihRVIuTYBmSGtQ&theme=dark" />
-        <source media="(prefers-color-scheme: light)" srcset="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=7d23863fd4be47b39e816193ded385c9&claim_uid=5ihRVIuTYBmSGtQ&theme=neutral" />
-        <img alt="Star History Chart" src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=7d23863fd4be47b39e816193ded385c9&claim_uid=5ihRVIuTYBmSGtQ&theme=neutral" width="250" height="55" />
-      </picture>
-    </a>
+    <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/dream-image/BongoCat?style=flat-square" /></a>
+    <a href="https://github.com/ayangweb/BongoCat"><img alt="Upstream ayangweb/BongoCat" src="https://img.shields.io/badge/upstream-ayangweb%2FBongoCat-181717?style=flat-square&logo=github" /></a>
+    <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" />
   </p>
 </div>
 
-| macOS                                                                                        | Windows                                                                                        | Linux(x11)                                                                                   |
-| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| ![macOS](https://i0.hdslb.com/bfs/openplatform/dff276b96d49c5d6c431b74b531aab72191b3d87.png) | ![Windows](https://i0.hdslb.com/bfs/openplatform/a4149b753856ee7f401989da902cf3b5ad35b39e.png) | ![Linux](https://i0.hdslb.com/bfs/openplatform/3b49f961819d3ff63b2b80251c1cc13c27e986b0.png) |
+> [!IMPORTANT]
+> 本仓库是开源项目 [ayangweb/BongoCat](https://github.com/ayangweb/BongoCat) 的修改版（fork），不是原项目的官方发行版。感谢原作者及所有上游贡献者提供的跨平台基础实现。
 
-## 赞助商
+## 清宵预览
 
-<a href="https://www.toolsetlink.com">
-  <img height="54" alt="UpgradeLink" src="https://github.com/user-attachments/assets/6b84fb0f-3f1d-44b5-9932-2298bc999d8d" />
-</a>
+上图是当前内置的清宵工作形态。她会根据键盘输入弹琴，也会在空闲、特定时间、久别归来或用户主动操作时进入宠物形态并播放不同动作。
 
-## 开发背景
+清宵的常态保持睁眼；眨眼、打盹、梦境和傲娇闭眼只在对应语义动作中短暂出现。工作待机和宠物待机均采用正常节奏的多帧动画，不会快速闪烁。
 
-本项目的灵感来源于 [MMmmmoko](https://github.com/MMmmmoko) 大佬开发的 [Bongo-Cat-Mver](https://github.com/MMmmmoko/Bongo-Cat-Mver)。它以独特的猫咪互动功能深受用户喜爱，但仅支持 Windows 平台。作为一名深度 macOS 用户，我特别希望在自己的设备上也能使用这款可爱的猫咪，于是我决定开发一个适配 macOS 的版本。
+## 这个修改版增加了什么
 
-同时，得益于 [Tauri](https://github.com/tauri-apps/tauri) 强大的跨平台能力，本项目不仅支持 macOS，还兼容 Windows 和 Linux(x11)，让更多的用户都能与这只可爱的猫咪互动！
+- **清宵雪碧图模型**：包含工作、进入宠物、待机、退出、弹琴、摸头、打盹、梦境、化形、问候、凝云珠、扫弦、挥手和傲娇等动画。
+- **可插拔动作模组**：模型通过 `behaviors.pet.modules` 加载独立 `module.json`；后续角色可以复用同一套运行时，不需要把动作硬编码进页面或菜单。
+- **主动互动**：右键菜单按“主动动作 → 动作”展示，用户可以随时选择问候、休息、弹琴、陪伴和角色性格动作。
+- **被动互动**：右键菜单按“被动动作 → 触发类型 → 动作”展示；系统也会根据空闲时长、时间窗口、会话启动、久别归来、输入活跃度和持续工作时长自动触发。
+- **对白气泡**：动作可以携带独立对白；中文优先使用[黄凯桦律师手写体](https://fonts.zeoseven.com/items/223/)，离线时自动回退到系统行楷或楷体，不影响应用运行。
+- **键盘气泡限频**：按下立即反馈，持续按住时按照模型配置的间隔重复冒泡，松开后立即停止，避免系统自动重复导致刷屏。
+- **模型管理与导入**：保留并加固 BongoCat 的模型导入、校验、切换和设置链路，失败时不会留下半导入状态。
+- **输入链路加固**：处理模型切换时仍按住的键、跨设备同名输入、macOS 监听恢复和新款 Mac `Fn` 键伴生事件等边界情况。
 
-## 下载
+## 动作触发方式
 
-- [夸克网盘](https://pan.quark.cn/s/70f2f2663ce1)
-- [GitHub Releases](https://github.com/ayangweb/BongoCat/releases)
+| 类型   | 触发方式                                 | 示例                                     |
+| ------ | ---------------------------------------- | ---------------------------------------- |
+| 主动   | 宠物窗口右键菜单、点击、悬停、抚摸       | 唤她一声、凝一颗云珠、陪她小憩、傲娇轻哼 |
+| 空闲   | 一段时间没有被追踪的键盘、鼠标或手柄活动 | 好奇、打盹、梦境、轻声提醒               |
+| 时间   | 本地日期、星期、固定时刻或每日时间窗口   | 早晨问候、午间休息、夜间琴音、节日对白   |
+| 会话   | 应用启动或窗口离开后重新可见             | 启动问候、久别归来                       |
+| 活跃度 | 短时输入爆发或持续工作达到阈值           | 被吓一跳、回应连击、提醒休息             |
 
-不确定下载哪一个？请查阅[下载指南](.github/DOWNLOAD_GUIDE.md)。
+所有动作都经过统一的优先级、冷却、打断和生命周期仲裁。键盘或手柄输入始终优先于自动宠物动作，不会因为后台触发器抢占正常使用。
 
-## 功能介绍
+## 快速开始
 
-- 适配 macOS、Windows 和 Linux(x11)。
-- 根据键盘、鼠标或手柄的操作，同步对应的动作。
-- 支持导入自定义模型，自由打造专属猫咪形象。
-- 完全开源，代码公开透明，绝不收集任何用户数据。
-- 支持离线运行，无需联网，保护用户隐私。
+请先安装 [Rust](https://www.rust-lang.org/tools/install)、[Node.js](https://nodejs.org/) 和 [pnpm](https://pnpm.io/)，并完成 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)配置。
 
-## 模型转换
+```shell
+git clone https://github.com/dream-image/BongoCat.git
+cd BongoCat
+pnpm install
+pnpm tauri dev
+```
 
-如果你想将 Bongo-Cat-Mver 应用中的模型转换为兼容 BongoCat 的格式，可以使用以下工具：
+构建当前平台安装包：
 
-🔗 [在线转换](https://bongocat.vteamer.cc)
+```shell
+pnpm tauri build
+```
 
-## 更多模型
+如果 Tauri 配置中存在 updater 公钥，正式更新包还需要提供对应的 `TAURI_SIGNING_PRIVATE_KEY`。仅构建本地未签名安装包时，应根据自己的分发方式关闭 updater artifact 签名要求；不要把私钥写进仓库或提交记录。
 
-你可以在这个仓库中探索、下载更多猫咪模型，或提交你的创作，与大家一起分享：
+## 模型与动作模组
 
-📦 [Awesome-BongoCat](https://github.com/ayangweb/Awesome-BongoCat)
+清宵模型入口位于：
 
-## 社区交流
+```text
+src-tauri/assets/models/qingxiao/
+├── model.json
+├── resources/cover.png
+├── sprites/
+└── modules/
+    ├── lively/
+    ├── routine/
+    └── tsundere/
+```
 
-<table>
-  <thead>
-    <tr>
-      <th>QQ 群 1</th>
-      <th>QQ 群 2</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>
-        <a href="https://qm.qq.com/q/AS3gNv2Vzy">
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="https://i0.hdslb.com/bfs/openplatform/8ecdc4982ab01b59d7731fcca3ec26631a274560.png"
-            />
-            <source
-              media="(prefers-color-scheme: light)"
-              srcset="https://i0.hdslb.com/bfs/openplatform/09f56580397063e1819c4c2ed63d07dee12720e1.png"
-            />
-            <img
-              alt="QQ Group 1"
-              src="https://i0.hdslb.com/bfs/openplatform/09f56580397063e1819c4c2ed63d07dee12720e1.png"
-              height="250"
-            />
-          </picture>
-        </a>
-      </td>
-      <td>
-        <a href="https://qm.qq.com/q/TmltLAod2O">
-          <picture>
-            <source
-              media="(prefers-color-scheme: dark)"
-              srcset="https://i0.hdslb.com/bfs/openplatform/473c522487ff33e0f32b15466aeb0734f17161c8.png"
-            />
-            <source
-              media="(prefers-color-scheme: light)"
-              srcset="https://i0.hdslb.com/bfs/openplatform/d5ae8c5af6ae1d0a1f066705ee822d1287384cf6.png"
-            />
-            <img
-              alt="QQ Group 2"
-              src="https://i0.hdslb.com/bfs/openplatform/d5ae8c5af6ae1d0a1f066705ee822d1287384cf6.png"
-              height="250"
-            />
-          </picture>
-        </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
+新增模组时应优先使用数据配置：在 `modules/<module-id>/module.json` 中声明动画、动作和触发器，再由模型的 `behaviors.pet.modules` 引用。不要在 Vue 页面、TypeScript 菜单或运行时控制器中硬编码某个角色的 action id。
 
-## 赞赏
+## 维护文档
 
-每一份认可都值得被珍视！赞赏随缘，心意无价，谢谢你的支持 ❤️
+- [清宵动作模组、触发器与资源约束](./docs/maintenance/2026-08-21-qingxiao-pet-action-modules.md)
+- [宠物行为、输入链路与模型切换交接记录](./docs/maintenance/2026-08-21-pet-behavior-hardening.md)
+- [上游下载指南](./.github/DOWNLOAD_GUIDE.md)
+- [贡献指南](./.github/CONTRIBUTING.md)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://i0.hdslb.com/bfs/openplatform/e7438bff14cdfb6bfd0feacbb482f99ea4093294.png" />
-  <source media="(prefers-color-scheme: light)" srcset="https://i0.hdslb.com/bfs/openplatform/da55cc3ec1556580c91e59f589792866c998c7c6.png" />
-  <img alt="微信赞赏码" src="https://i0.hdslb.com/bfs/openplatform/da55cc3ec1556580c91e59f589792866c998c7c6.png" height="250" />
-</picture>
+## 下载说明
 
-## 贡献指南
+这个修改版目前以源码和功能分支为主。如果只需要上游稳定版本，请前往 [ayangweb/BongoCat Releases](https://github.com/ayangweb/BongoCat/releases)；上游安装包不包含本仓库新增的清宵动作模组。
 
-感谢大家为 BongoCat 做出的宝贵贡献！如果你也希望为 BongoCat 做出贡献，请查阅[贡献指南](.github/CONTRIBUTING.md)。
+## 开源来源与许可证
 
-<a href="https://openomy.com/ayangweb/BongoCat" target="_blank" style="display: block; width: 100%;" align="center">
-  <img src="https://openomy.com/svg?repo=ayangweb/BongoCat&chart=bubble" alt="Contribution Leaderboard" style="display: block; width: 100%;" />
-</a>
+本项目基于以下开源工作继续开发：
 
-## 历史星标
+- 上游项目：[ayangweb/BongoCat](https://github.com/ayangweb/BongoCat)
+- 上游灵感来源：[MMmmmoko/Bongo-Cat-Mver](https://github.com/MMmmmoko/Bongo-Cat-Mver)
+- 桌面框架：[Tauri](https://github.com/tauri-apps/tauri)
 
-<a href="https://www.star-history.com/#ayangweb/BongoCat&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ayangweb/BongoCat&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ayangweb/BongoCat&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ayangweb/BongoCat&type=Date" />
- </picture>
-</a>
+仓库代码继续遵循 [MIT License](./LICENSE)，原版权声明予以保留。清宵角色形象、远程字体及其他第三方素材可能具有各自的著作权或授权条件；MIT 软件许可证不会自动授予这些第三方素材的商标、角色形象或再分发权，请在发布和商用前分别确认。
