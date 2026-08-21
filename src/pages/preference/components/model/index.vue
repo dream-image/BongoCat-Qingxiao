@@ -4,7 +4,7 @@ import { remove } from '@tauri-apps/plugin-fs'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import { useElementSize } from '@vueuse/core'
 import { Card, Masonry, message, Popconfirm } from 'antdv-next'
-import { computed, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { Model } from '@/stores/model'
@@ -28,6 +28,7 @@ const { height } = useElementSize(firstCardRef)
 const { t } = useI18n()
 const openBehaviorModal = ref(false)
 const failedCoverIds = ref(new Set<string>())
+const deletingIds = new Set<string>()
 const behaviorEnabled = computed(() => {
   return modelSelectionStore.currentModel?.renderer === 'sprite'
     ? catStore.pet.enabled
@@ -55,19 +56,32 @@ function handleToggle(nextModel: Model) {
 
 async function handleDelete(item: Model) {
   const { id, path } = item
+  const wasSelected = id === modelSelectionStore.currentModel?.id
+
+  if (deletingIds.has(id)) return
+
+  deletingIds.add(id)
 
   try {
     await remove(path, { recursive: true })
+
+    modelRegistryStore.models = modelRegistryStore.models.filter(item => item.id !== id)
+
+    if (wasSelected) {
+      modelSelectionStore.currentModel = modelRegistryStore.models[0]
+    }
+
+    await nextTick()
+    await Promise.all([
+      modelRegistryStore.$tauri.saveNow(),
+      modelSelectionStore.$tauri.saveNow(),
+    ])
 
     message.success(t('pages.preference.model.hints.deleteSuccess'))
   } catch (error) {
     message.error(String(error))
   } finally {
-    modelRegistryStore.models = modelRegistryStore.models.filter(item => item.id !== id)
-
-    if (id === modelSelectionStore.currentModel?.id) {
-      modelSelectionStore.currentModel = modelRegistryStore.models[0]
-    }
+    deletingIds.delete(id)
   }
 }
 

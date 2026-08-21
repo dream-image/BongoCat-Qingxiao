@@ -1,14 +1,14 @@
 <script setup lang="ts">
+import type { PhysicalPosition } from '@tauri-apps/api/dpi'
+
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
 import { remove } from '@tauri-apps/plugin-fs'
 import { message } from 'antdv-next'
 import { nanoid } from 'nanoid'
-import { onMounted, ref, useTemplateRef, watch } from 'vue'
+import { onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
-import type { ValidatedModelDirectory } from '@/utils/model-validation'
 
 import { INVOKE_KEY } from '@/constants'
 import { useModelRegistryStore } from '@/stores/model'
@@ -16,38 +16,62 @@ import { validateModelDirectory } from '@/utils/model-validation'
 
 const dropRef = useTemplateRef('drop')
 const dragenter = ref(false)
+const importing = ref(false)
 const selectPaths = ref<string[]>([])
 const modelRegistryStore = useModelRegistryStore()
 const { t } = useI18n()
+const appWindow = getCurrentWebviewWindow()
+let disposed = false
+let unlisten: (() => void) | undefined
 
-onMounted(() => {
-  const appWindow = getCurrentWebviewWindow()
+async function isInDropZone(position: PhysicalPosition) {
+  if (!dropRef.value) return false
 
-  appWindow.onDragDropEvent(({ payload }) => {
-    const { type } = payload
+  const scaleFactor = await appWindow.scaleFactor()
+  const { x, y } = position.toLogical(scaleFactor)
+  const { left, right, top, bottom } = dropRef.value.getBoundingClientRect()
 
-    if (type === 'over') {
-      const { x, y } = payload.position
+  return x >= left && x <= right && y >= top && y <= bottom
+}
 
-      if (dropRef.value) {
-        const { left, right, top, bottom } = dropRef.value.getBoundingClientRect()
-
-        const inBoundsX = x >= left && x <= right
-        const inBoundsY = y >= top && y <= bottom
-
-        dragenter.value = inBoundsX && inBoundsY
+onMounted(async () => {
+  const unregister = await appWindow.onDragDropEvent(({ payload }) => {
+    void (async () => {
+      if (payload.type === 'leave') {
+        dragenter.value = false
+        return
       }
-    } else if (type === 'drop' && dragenter.value) {
-      dragenter.value = false
 
-      selectPaths.value = payload.paths
-    } else {
-      dragenter.value = false
-    }
+      const inDropZone = await isInDropZone(payload.position)
+
+      if (payload.type === 'drop') {
+        if (inDropZone && !importing.value) {
+          selectPaths.value = payload.paths
+        }
+
+        dragenter.value = false
+        return
+      }
+
+      dragenter.value = inDropZone
+    })()
   })
+
+  if (disposed) {
+    unregister()
+  } else {
+    unlisten = unregister
+  }
+})
+
+onUnmounted(() => {
+  disposed = true
+  unlisten?.()
 })
 
 async function handleUpload() {
+  if (importing.value) return
+
   const selected = await open({ directory: true, multiple: true })
 
   if (!selected) return
@@ -56,28 +80,29 @@ async function handleUpload() {
 }
 
 watch(selectPaths, async (paths) => {
-  for await (const fromPath of paths) {
-    try {
-      const id = nanoid()
-      const detectedModel = await validateModelDirectory(fromPath)
+  if (paths.length === 0 || importing.value) return
 
-      // 前端只提交不可解释为路径的模型 ID；实际目标必须由 Rust 的应用数据目录解析器生成并回传。
-      const toPath = await invoke<string>(INVOKE_KEY.IMPORT_MODEL_DIRECTORY, {
-        fromPath,
-        modelId: id,
-      })
+  importing.value = true
 
-      let storedModel: ValidatedModelDirectory
+  try {
+    for (const fromPath of paths) {
+      let toPath: string | undefined
 
       try {
-        // 复制后重新校验实际落盘内容，关闭“校验完成到复制开始”之间源目录被替换的窗口。
-        storedModel = await validateModelDirectory(toPath)
+        const id = nanoid()
+        const detectedModel = await validateModelDirectory(fromPath)
+
+        toPath = await invoke<string>(INVOKE_KEY.IMPORT_MODEL_DIRECTORY, {
+          fromPath,
+          modelId: id,
+        })
+
+        const storedModel = await validateModelDirectory(toPath)
 
         if (storedModel.renderer !== detectedModel.renderer) {
           throw new Error('Model renderer changed while importing')
         }
 
-        // 成功提示必须等注册表的 saveNow 确认；注册或落盘失败由 store 回滚旧快照。
         await modelRegistryStore.registerCustomModel({
           id,
           path: toPath,
@@ -86,16 +111,19 @@ watch(selectPaths, async (paths) => {
           displayName: storedModel.displayName,
           isPreset: false,
         })
-      } catch (error) {
-        // 复制目录与注册表必须同生共死，不能留下未注册的孤儿模型。
-        await remove(toPath, { recursive: true }).catch(() => {})
-        throw error
-      }
 
-      message.success(t('pages.preference.model.hints.importSuccess'))
-    } catch (error) {
-      message.error(String(error))
+        message.success(t('pages.preference.model.hints.importSuccess'))
+      } catch (error) {
+        if (toPath) {
+          await remove(toPath, { recursive: true }).catch(() => {})
+        }
+
+        message.error(String(error))
+      }
     }
+  } finally {
+    selectPaths.value = []
+    importing.value = false
   }
 })
 </script>

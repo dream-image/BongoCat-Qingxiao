@@ -58,8 +58,6 @@ export async function validateModelDirectory(
     if (manifest.renderer === 'sprite') {
       const validatedManifest = await sprite.validateModel(path)
 
-      await resolveModelResourcePath(path, 'resources/cover.png')
-
       return {
         renderer: 'sprite',
         mode: validatedManifest.mode ?? options.spriteDefaultMode ?? 'standard',
@@ -74,7 +72,6 @@ export async function validateModelDirectory(
   }
 
   await live2d.validateModel(path)
-  await resolveModelResourcePath(path, 'resources/cover.png')
 
   return {
     renderer: 'live2d',
