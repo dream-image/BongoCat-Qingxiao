@@ -102,7 +102,19 @@ src-tauri/assets/models/qingxiao/
 
 ## 下载说明
 
-这个修改版目前以源码和功能分支为主。如果只需要上游稳定版本，请前往 [ayangweb/BongoCat Releases](https://github.com/ayangweb/BongoCat/releases)；上游安装包不包含本仓库新增的清宵动作模组。
+本仓库的安装包发布在 [dream-image/BongoCat Releases](https://github.com/dream-image/BongoCat/releases)。Windows x64 使用 `.exe` 安装包；当前 macOS 包由 Apple Silicon 设备构建，仅适用于 arm64 Mac。
+
+### 打开未签名的 macOS 版本
+
+当前 macOS 安装包没有 Apple Developer ID 签名和公证，首次打开时 Gatekeeper 可能提示“无法验证开发者”。请只从本仓库 Release 下载，并按以下方式打开：
+
+1. 打开 `.dmg`，将 `BongoCat.app` 拖入“应用程序”。
+2. 在 Finder 的“应用程序”中右键或按住 `Control` 点击 `BongoCat`，选择“打开”。
+3. 在再次出现的确认窗口中选择“打开”。如果仍被阻止，前往“系统设置 → 隐私与安全性”，找到 BongoCat 的拦截提示并选择“仍要打开”。
+
+不需要全局关闭 Gatekeeper，也不要执行来源不明的解除隔离命令。应用启动后，键盘监听等功能仍需按照 macOS 提示授予对应的系统权限。
+
+如果只需要上游稳定版本，请前往 [ayangweb/BongoCat Releases](https://github.com/ayangweb/BongoCat/releases)；上游安装包不包含本仓库新增的清宵动作模组。
 
 ## 开源来源与许可证
 
