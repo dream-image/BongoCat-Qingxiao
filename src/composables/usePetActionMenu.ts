@@ -36,15 +36,10 @@ export function usePetActionMenu() {
       const activeGroups = session?.activeGroups.filter(group => group.actions.length > 0) ?? []
       const passiveGroups = session?.passiveGroups.filter(group => group.actions.length > 0) ?? []
       const items: PetActionMenuItem[] = []
-      const createActionItem = (
-        action: typeof activeGroups[number]['actions'][number],
-        groupLabel?: string,
-      ) => {
-        const actionLabel = action.label || action.id
-
+      const createActionItem = (action: typeof activeGroups[number]['actions'][number]) => {
         return {
           id: getPetActionMenuItemId(action.id),
-          text: groupLabel ? `${groupLabel} · ${actionLabel}` : actionLabel,
+          text: action.label || action.id,
           enabled: action.enabled,
           action: () => {
             if (session) modelRuntime.selectPetActionMenuAction(session.revision, action.id)
@@ -57,9 +52,7 @@ export function usePetActionMenu() {
           items.push({ item: 'Separator' })
         }
 
-        const groupLabel = group.label || t('composables.usePetActionMenu.group')
-
-        items.push(...group.actions.map(action => createActionItem(action, groupLabel)))
+        items.push(...group.actions.map(action => createActionItem(action)))
       }
 
       if (passiveGroups.length > 0) {
