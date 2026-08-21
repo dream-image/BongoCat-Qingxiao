@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { appDataDir } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
 import { remove } from '@tauri-apps/plugin-fs'
@@ -14,7 +13,6 @@ import type { ValidatedModelDirectory } from '@/utils/model-validation'
 import { INVOKE_KEY } from '@/constants'
 import { useModelRegistryStore } from '@/stores/model'
 import { validateModelDirectory } from '@/utils/model-validation'
-import { join } from '@/utils/path'
 
 const dropRef = useTemplateRef('drop')
 const dragenter = ref(false)
@@ -63,11 +61,10 @@ watch(selectPaths, async (paths) => {
       const id = nanoid()
       const detectedModel = await validateModelDirectory(fromPath)
 
-      const toPath = join(await appDataDir(), 'custom-models', id)
-
-      await invoke(INVOKE_KEY.COPY_DIR, {
+      // 前端只提交不可解释为路径的模型 ID；实际目标必须由 Rust 的应用数据目录解析器生成并回传。
+      const toPath = await invoke<string>(INVOKE_KEY.IMPORT_MODEL_DIRECTORY, {
         fromPath,
-        toPath,
+        modelId: id,
       })
 
       let storedModel: ValidatedModelDirectory

@@ -19,7 +19,7 @@ export const LISTEN_KEY = {
 }
 
 export const INVOKE_KEY = {
-  COPY_DIR: 'copy_dir',
+  IMPORT_MODEL_DIRECTORY: 'import_model_directory',
   // 模型资源必须由 Rust canonicalize 后再交给 WebView，避免符号链接绕过前端相对路径校验。
   RESOLVE_MODEL_RESOURCE_PATH: 'resolve_model_resource_path',
   START_DEVICE_LISTENING: 'start_device_listening',
