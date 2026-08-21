@@ -45,6 +45,7 @@ export interface SpriteBehaviorsConfig {
 export interface SpriteBubbleConfig {
   enabled: boolean
   duration: number
+  repeatInterval: number
   rise: number
   fontSize: number
   maxVisible: number
@@ -161,6 +162,7 @@ const MAX_IMAGE_HEADER_BYTES = 512 * 1024
 const defaultBubbleConfig: SpriteBubbleConfig = {
   enabled: true,
   duration: 900,
+  repeatInterval: 300,
   rise: 48,
   fontSize: 22,
   maxVisible: 5,
@@ -199,6 +201,10 @@ class SpriteRenderer {
   // Map 的插入顺序充当跨键盘/鼠标的最近按下栈，释放当前动作后才能恢复真正最后仍按住的绑定。
   private pressedInputOrder = new Map<string, PressedInput>()
   private bubbles: ActiveBubble[] = []
+  private keyboardBubbleTimestamps = new Map<string, number>()
+  // 系统全局监听在不同平台对按键自动重复的上报并不一致；自行维护计时器，才能保证
+  // 长按时持续冒泡且频率稳定，释放按键后再由统一出口立即停止。
+  private keyboardBubbleRepeatTimers = new Map<string, ReturnType<typeof setInterval>>()
   private bubbleConfig: SpriteBubbleConfig = { ...defaultBubbleConfig }
   private bubbleSequence = 0
   // 对白使用独立单槽，避免主动/被动动作说话时挤占连续按键的冒泡队列。
@@ -368,7 +374,38 @@ class SpriteRenderer {
   }
 
   public showKeyboardBubble(key: string, label?: string) {
-    return this.showBubble(key, label)
+    const timestamp = performance.now()
+    const previousTimestamp = this.keyboardBubbleTimestamps.get(key)
+
+    if (previousTimestamp !== undefined
+      && timestamp - previousTimestamp < this.bubbleConfig.repeatInterval) {
+      return false
+    }
+
+    const shown = this.showBubble(key, label, timestamp)
+
+    if (shown) {
+      this.keyboardBubbleTimestamps.set(key, timestamp)
+
+      if (!this.keyboardBubbleRepeatTimers.has(key)) {
+        const timer = setInterval(() => {
+          this.showKeyboardBubble(key, label)
+        }, this.bubbleConfig.repeatInterval)
+
+        this.keyboardBubbleRepeatTimers.set(key, timer)
+      }
+    }
+
+    return shown
+  }
+
+  private stopKeyboardBubbleRepeat(key: string) {
+    const timer = this.keyboardBubbleRepeatTimers.get(key)
+
+    if (timer !== undefined) clearInterval(timer)
+
+    this.keyboardBubbleRepeatTimers.delete(key)
+    this.keyboardBubbleTimestamps.delete(key)
   }
 
   public showSpeechBubble(payload: PetSpeechPayload) {
@@ -434,6 +471,7 @@ class SpriteRenderer {
       const animationName = this.pressedKeyboard.get(key)
 
       this.pressedKeyboard.delete(key)
+      this.stopKeyboardBubbleRepeat(key)
       this.removePressedInput('keyboard', key)
 
       if (!keyboard) return false
@@ -813,7 +851,7 @@ class SpriteRenderer {
       const tailHeight = fontSize * 0.34
 
       this.context.save()
-      this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+      this.context.font = this.getBubbleFont(bubble.text, fontSize)
 
       const textWidth = this.context.measureText(bubble.text).width
       const cloudWidth = Math.max(cloudHeight * 1.08, textWidth + paddingX * 2)
@@ -1042,7 +1080,7 @@ class SpriteRenderer {
     this.context.stroke()
     this.context.restore()
 
-    this.context.font = `700 ${layout.fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+    this.context.font = this.getBubbleFont(bubble.text, layout.fontSize)
     this.context.fillStyle = this.bubbleConfig.textColor
     this.context.strokeStyle = 'rgba(255, 255, 255, 0.76)'
     this.context.lineWidth = Math.max(1.5, layout.fontSize * 0.085)
@@ -1207,7 +1245,7 @@ class SpriteRenderer {
 
     const fontSize = this.bubbleConfig.fontSize * viewportScale
 
-    this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+    this.context.font = this.getBubbleFont(text, fontSize)
 
     const textWidth = this.context.measureText(text).width
     const maxTextWidth = this.canvas.width * 0.8 - fontSize * 1.3
@@ -1241,7 +1279,7 @@ class SpriteRenderer {
     let width = Number.POSITIVE_INFINITY
 
     while (fontSize >= minimumFontSize) {
-      this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+      this.context.font = this.getBubbleFont(text, fontSize)
 
       const candidate = this.splitSpeechText(text, maximumTextWidth)
 
@@ -1254,7 +1292,7 @@ class SpriteRenderer {
     }
 
     fontSize = Math.max(minimumFontSize, fontSize)
-    this.context.font = `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
+    this.context.font = this.getBubbleFont(text, fontSize)
 
     // 两行仍放不下时只在末尾省略，保持云朵尺寸稳定而不是让长文冲出画布。
     if (width > maximumTextWidth) {
@@ -1268,6 +1306,14 @@ class SpriteRenderer {
       lineHeight: fontSize * 1.2,
       width,
     }
+  }
+
+  private getBubbleFont(text: string, fontSize: number) {
+    if (/\p{Script=Han}/u.test(text)) {
+      return `400 ${fontSize}px "huangkaihuaLawyerfont", "Xingkai SC", STXingkai, KaiTi, "Kaiti SC", cursive`
+    }
+
+    return `700 ${fontSize}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`
   }
 
   private splitSpeechText(text: string, maximumWidth: number) {
@@ -1340,10 +1386,9 @@ class SpriteRenderer {
     return ellipsis
   }
 
-  private showBubble(key: string, label?: string) {
+  private showBubble(key: string, label: string | undefined, timestamp: number) {
     if (!this.canvas || !this.context || !this.config || !this.bubbleConfig.enabled) return false
 
-    const timestamp = performance.now()
     const actualLabel = label?.trim()
     const bubbleLabel = actualLabel
       && this.isDisplayableLabel(actualLabel)
@@ -1571,6 +1616,10 @@ class SpriteRenderer {
     this.pressedMouse.clear()
     this.pressedInputOrder.clear()
     this.bubbles = []
+    // reset 同时覆盖切换模型和销毁；必须先停掉旧模型的长按计时器，避免其继续向新模型冒泡。
+    for (const timer of this.keyboardBubbleRepeatTimers.values()) clearInterval(timer)
+    this.keyboardBubbleRepeatTimers.clear()
+    this.keyboardBubbleTimestamps.clear()
     this.bubbleConfig = { ...defaultBubbleConfig }
     this.bubbleSequence = 0
     // reset 同时服务模型切换与 destroy，递增代次可统一作废旧对白生命周期。
@@ -2061,6 +2110,7 @@ class SpriteRenderer {
 
       for (const [name, value] of Object.entries({
         duration: bubbles.duration,
+        repeatInterval: bubbles.repeatInterval,
         rise: bubbles.rise,
         fontSize: bubbles.fontSize,
         strokeWidth: bubbles.strokeWidth,

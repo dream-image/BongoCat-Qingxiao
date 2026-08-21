@@ -671,6 +671,11 @@ export function useDevice() {
     if (kind === 'KeyboardPress' || kind === 'KeyboardRelease') {
       const code = typeof value === 'string' ? value : value.code
       const label = typeof value === 'string' ? void 0 : value.label
+
+      // 新款 Mac 的 Fn/地球键会同时产生 Function 和 Unknown(179)；后者只是同一次
+      // 物理输入的伴生事件，忽略它才能避免一次按键出现 Fn 与 Unknown 两组气泡。
+      if (isMac && code === 'Unknown(179)') return
+
       if (code === 'CapsLock') {
         return handleAutoRelease(code, code)
       }

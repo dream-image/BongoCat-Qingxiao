@@ -368,6 +368,7 @@
   "bubbles": {
     "enabled": true,
     "duration": 1380,
+    "repeatInterval": 320,
     "rise": 148,
     "fontSize": 29,
     "maxVisible": 4,
