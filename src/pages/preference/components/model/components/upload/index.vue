@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { appDataDir } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { open } from '@tauri-apps/plugin-dialog'
-import { exists, readDir } from '@tauri-apps/plugin-fs'
+import { exists, readDir, remove } from '@tauri-apps/plugin-fs'
 import { message } from 'antdv-next'
 import { nanoid } from 'nanoid'
 import { onMounted, ref, useTemplateRef, watch } from 'vue'
@@ -13,7 +13,8 @@ import type { ModelMode, ModelRenderer } from '@/stores/model'
 
 import { INVOKE_KEY } from '@/constants'
 import { useModelStore } from '@/stores/model'
-import { join, readBoundedTextFile } from '@/utils/path'
+import live2d from '@/utils/live2d'
+import { join, readBoundedTextFile, resolveModelResourcePath } from '@/utils/path'
 import sprite from '@/utils/sprite'
 
 const MAX_MODEL_MANIFEST_BYTES = 1024 * 1024
@@ -23,6 +24,12 @@ const dragenter = ref(false)
 const selectPaths = ref<string[]>([])
 const modelStore = useModelStore()
 const { t } = useI18n()
+
+interface ValidatedModelImport {
+  mode: ModelMode
+  renderer: ModelRenderer
+  displayName?: string
+}
 
 onMounted(() => {
   const appWindow = getCurrentWebviewWindow()
@@ -59,60 +66,67 @@ async function handleUpload() {
   selectPaths.value = selected
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+async function detectLive2DMode(path: string): Promise<ModelMode> {
+  const files = await readDir(join(path, 'resources', 'right-keys')).catch(() => [])
+
+  if (files.length === 0) return 'standard'
+
+  const fileNames = files.map(file => file.name.split('.')[0])
+
+  return fileNames.includes('East') ? 'gamepad' : 'keyboard'
+}
+
+async function validateModelImport(path: string): Promise<ValidatedModelImport> {
+  const manifestCandidate = join(path, 'model.json')
+
+  if (await exists(manifestCandidate)) {
+    const manifestPath = await resolveModelResourcePath(path, 'model.json')
+    const content = await readBoundedTextFile(
+      manifestPath,
+      MAX_MODEL_MANIFEST_BYTES,
+      'Model manifest',
+    )
+    const manifest = JSON.parse(content) as unknown
+
+    if (!isRecord(manifest)) {
+      throw new TypeError('Model manifest must be an object')
+    }
+
+    if (manifest.renderer === 'sprite') {
+      const validatedManifest = await sprite.validateModel(path)
+
+      await resolveModelResourcePath(path, 'resources/cover.png')
+
+      return {
+        renderer: 'sprite',
+        mode: validatedManifest.mode ?? 'standard',
+        displayName: validatedManifest.displayName,
+      }
+    }
+
+    if (manifest.renderer !== undefined && manifest.renderer !== 'live2d') {
+      throw new TypeError(`Unsupported model renderer: ${String(manifest.renderer)}`)
+    }
+  }
+
+  await live2d.validateModel(path)
+  await resolveModelResourcePath(path, 'resources/cover.png')
+
+  return {
+    renderer: 'live2d',
+    mode: await detectLive2DMode(path),
+  }
+}
+
 watch(selectPaths, async (paths) => {
   for await (const fromPath of paths) {
     try {
       const id = nanoid()
-
-      let mode: ModelMode = 'standard'
-      let renderer: ModelRenderer = 'live2d'
-      let displayName: string | undefined
-
-      const manifestPath = join(fromPath, 'model.json')
-
-      if (await exists(manifestPath)) {
-        // renderer 探测发生在 sprite.validateModel 之前，也必须共用 manifest 字节上限。
-        const content = await readBoundedTextFile(
-          manifestPath,
-          MAX_MODEL_MANIFEST_BYTES,
-          'Model manifest',
-        )
-        let manifest: unknown
-
-        try {
-          manifest = JSON.parse(content)
-        } catch (error) {
-          if (/"renderer"\s*:\s*"sprite"/.test(content)) throw error
-
-          manifest = undefined
-        }
-
-        if (manifest && typeof manifest === 'object'
-          && 'renderer' in manifest && manifest.renderer === 'sprite') {
-          const validatedManifest = await sprite.validateModel(fromPath)
-
-          renderer = 'sprite'
-          displayName = validatedManifest.displayName
-
-          if (validatedManifest.mode) {
-            mode = validatedManifest.mode
-          }
-        }
-      }
-
-      const files = renderer === 'live2d'
-        ? await readDir(join(fromPath, 'resources', 'right-keys')).catch(() => [])
-        : []
-
-      if (files.length > 0) {
-        const fileNames = files.map(file => file.name.split('.')[0])
-
-        if (fileNames.includes('East')) {
-          mode = 'gamepad'
-        } else {
-          mode = 'keyboard'
-        }
-      }
+      const detectedModel = await validateModelImport(fromPath)
 
       const toPath = join(await appDataDir(), 'custom-models', id)
 
@@ -121,12 +135,26 @@ watch(selectPaths, async (paths) => {
         toPath,
       })
 
+      let storedModel: ValidatedModelImport
+
+      try {
+        // 复制后重新校验实际落盘内容，关闭“校验完成到复制开始”之间源目录被替换的窗口。
+        storedModel = await validateModelImport(toPath)
+
+        if (storedModel.renderer !== detectedModel.renderer) {
+          throw new Error('Model renderer changed while importing')
+        }
+      } catch (error) {
+        await remove(toPath, { recursive: true }).catch(() => {})
+        throw error
+      }
+
       modelStore.models.push({
         id,
         path: toPath,
-        mode,
-        renderer,
-        displayName,
+        mode: storedModel.mode,
+        renderer: storedModel.renderer,
+        displayName: storedModel.displayName,
         isPreset: false,
       })
 

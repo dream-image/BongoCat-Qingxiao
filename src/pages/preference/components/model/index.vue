@@ -23,6 +23,7 @@ const firstCardRef = useTemplateRef('firstCard')
 const { height } = useElementSize(firstCardRef)
 const { t } = useI18n()
 const openBehaviorModal = ref(false)
+const failedCoverIds = ref(new Set<string>())
 const behaviorEnabled = computed(() => {
   return modelStore.currentModel?.renderer === 'sprite'
     ? catStore.pet.enabled
@@ -65,6 +66,10 @@ async function handleDelete(item: Model) {
     }
   }
 }
+
+function handleCoverError(id: string) {
+  failedCoverIds.value.add(id)
+}
 </script>
 
 <template>
@@ -89,9 +94,19 @@ async function handleDelete(item: Model) {
         @click="handleToggle(data)"
       >
         <template #cover>
+          <div
+            v-if="failedCoverIds.has(data.id)"
+            class="w-full flex items-center justify-center bg-[--ant-color-fill-quaternary] text-12 text-[--ant-color-text-quaternary]"
+            style="aspect-ratio: 612 / 354"
+          >
+            <i class="i-lucide:image-off" />
+          </div>
+
           <img
+            v-else
             alt="example"
             :src="convertFileSrc(join(data.path, 'resources', 'cover.png'))"
+            @error="handleCoverError(data.id)"
           >
         </template>
 
