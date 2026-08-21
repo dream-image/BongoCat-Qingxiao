@@ -43,7 +43,10 @@ pub fn platform(
     panel.set_collection_behavior(
         CollectionBehavior::new()
             .stationary()
-            .move_to_active_space()
+            // 主窗口启动时通常已经可见，不会再触发 show_window；这里必须直接加入所有 Space，
+            // 否则切换 macOS 桌面后窗口会留在启动时的 Space，看起来像“置顶失效”。
+            // 该行为只决定窗口出现在哪些 Space，不会激活应用或抢走游戏焦点。
+            .can_join_all_spaces()
             .full_screen_auxiliary()
             .into(),
     );
