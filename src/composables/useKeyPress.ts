@@ -6,34 +6,94 @@ import {
   register,
   unregister,
 } from '@tauri-apps/plugin-global-shortcut'
-import { onUnmounted, ref, watch } from 'vue'
+import { onUnmounted, watch } from 'vue'
 
-export function useKeyPress(shortcut: Ref<string | undefined, string>, callback: ShortcutHandler) {
-  const oldShortcut = ref(shortcut.value)
+interface ShortcutRegistryEntry {
+  handlers: Map<symbol, ShortcutHandler>
+  operation: Promise<void>
+  registered: boolean
+}
 
-  async function unbind() {
-    if (!oldShortcut.value) return
+const shortcutRegistry = new Map<string, ShortcutRegistryEntry>()
 
-    const registered = await isRegistered(oldShortcut.value)
+function scheduleShortcutReconcile(shortcut: string, entry: ShortcutRegistryEntry) {
+  entry.operation = entry.operation
+    .catch(() => void 0)
+    .then(async () => {
+      if (entry.handlers.size > 0) {
+        if (entry.registered) return
 
-    if (!registered) return
+        if (await isRegistered(shortcut)) await unregister(shortcut)
+        if (entry.handlers.size === 0) return
 
-    return unregister(oldShortcut.value)
-  }
+        await register(shortcut, (event) => {
+          if (event.state === 'Released') return
 
-  watch(shortcut, async (value) => {
-    await unbind()
+          const handlers = [...entry.handlers.values()]
 
-    if (!value) return
+          handlers[handlers.length - 1]?.(event)
+        })
+        entry.registered = true
 
-    await register(value, (event) => {
-      if (event.state === 'Released') return
+        return
+      }
 
-      callback(event)
+      if (entry.registered || await isRegistered(shortcut)) {
+        await unregister(shortcut)
+      }
+
+      entry.registered = false
+
+      if (shortcutRegistry.get(shortcut) === entry && entry.handlers.size === 0) {
+        shortcutRegistry.delete(shortcut)
+      }
     })
 
-    oldShortcut.value = value
+  void entry.operation.catch((reason) => {
+    console.error(`Failed to reconcile global shortcut ${shortcut}:`, reason)
+  })
+}
+
+function attachShortcut(shortcut: string, owner: symbol, callback: ShortcutHandler) {
+  const entry = shortcutRegistry.get(shortcut) ?? {
+    handlers: new Map<symbol, ShortcutHandler>(),
+    operation: Promise.resolve(),
+    registered: false,
+  }
+
+  entry.handlers.set(owner, callback)
+  shortcutRegistry.set(shortcut, entry)
+  scheduleShortcutReconcile(shortcut, entry)
+}
+
+function detachShortcut(shortcut: string, owner: symbol) {
+  const entry = shortcutRegistry.get(shortcut)
+
+  if (!entry) return
+
+  entry.handlers.delete(owner)
+  scheduleShortcutReconcile(shortcut, entry)
+}
+
+export function useKeyPress(shortcut: Ref<string | undefined, string>, callback: ShortcutHandler) {
+  const owner = Symbol('shortcut-owner')
+  let currentShortcut = ''
+
+  watch(shortcut, (value) => {
+    const nextShortcut = value ?? ''
+
+    if (nextShortcut === currentShortcut) return
+
+    if (currentShortcut) detachShortcut(currentShortcut, owner)
+
+    currentShortcut = nextShortcut
+
+    if (currentShortcut) attachShortcut(currentShortcut, owner, callback)
   }, { immediate: true })
 
-  onUnmounted(unbind)
+  onUnmounted(() => {
+    if (currentShortcut) detachShortcut(currentShortcut, owner)
+
+    currentShortcut = ''
+  })
 }

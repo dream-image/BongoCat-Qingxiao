@@ -2,7 +2,12 @@ import type { MotionInfo } from 'easy-live2d'
 
 import type { ModelRenderer } from '@/stores/model'
 
-import type { PetBehaviorRuntimeContext, PetInteractionInput, PetPoint } from './pet-behavior'
+import type {
+  PetBehaviorRuntimeContext,
+  PetBehaviorState,
+  PetInteractionInput,
+  PetPoint,
+} from './pet-behavior'
 import type { PetPassiveActivitySignal } from './pet-behavior-passive'
 
 import live2d from './live2d'
@@ -16,6 +21,7 @@ class ModelRuntime {
   private loadGeneration = 0
   private petExitGeneration = 0
   private pendingSpriteBinding: string | undefined
+  private resumePressedBindingsAfterManualAction = false
   // 菜单期间按下的物理键仍需成对记账，但必须与可渲染绑定隔离到 release 到来为止。
   private readonly menuSuppressedKeyboardInputs = new Set<string>()
   // inputId 表示物理输入身份，value 表示当前模型映射出的动画键。二者分离后，切模型时可以
@@ -29,6 +35,7 @@ class ModelRuntime {
       speak: payload => sprite.showSpeechBubble(payload),
       clearSpeech: () => sprite.clearSpeechBubble(),
     },
+    onStateChange: state => this.handlePetBehaviorStateChange(state),
   })
 
   public async load(path: string, renderer: ModelRenderer) {
@@ -180,6 +187,9 @@ class ModelRuntime {
       if (!shouldReleaseRenderState) return result
 
       this.pressedSpriteBindings.delete(renderKey)
+      if (this.pressedSpriteBindings.size === 0) {
+        this.resumePressedBindingsAfterManualAction = false
+      }
       sprite.handleKeyboardBinding(renderKey, false, !this.petBehavior.isPetActive)
 
       return result
@@ -356,14 +366,30 @@ class ModelRuntime {
     return this.petBehavior.beginActionMenu(locale)
   }
 
-  public selectPetActionMenuAction(revision: number, triggerId: string) {
+  public getPetActionCatalog(locale: string) {
+    if (this.renderer !== 'sprite') return null
+
+    return this.petBehavior.getActionCatalog(locale)
+  }
+
+  public triggerPetActionCatalogItem(itemId: string) {
     if (this.renderer !== 'sprite') return false
 
-    return this.petBehavior.selectActionMenuItem(revision, triggerId)
+    const accepted = this.petBehavior.triggerActionCatalogItem(itemId)
+
+    return this.adoptExplicitPetAction(accepted)
+  }
+
+  public selectPetActionMenuAction(revision: number, itemId: string) {
+    if (this.renderer !== 'sprite') return false
+
+    return this.petBehavior.selectActionMenuItem(revision, itemId)
   }
 
   public endPetActionMenu(revision: number) {
-    return this.petBehavior.endActionMenu(revision)
+    const accepted = this.petBehavior.endActionMenu(revision)
+
+    return this.adoptExplicitPetAction(accepted)
   }
 
   public readonly setMotionSoundEnabled = (enabled: boolean) => {
@@ -395,9 +421,36 @@ class ModelRuntime {
     // 所有重映射/销毁入口统一经过这里，确保等待中的退出链路看见新的 generation。
     this.petExitGeneration++
     this.pendingSpriteBinding = void 0
+    this.resumePressedBindingsAfterManualAction = false
     this.pressedSpriteBindings.clear()
     // 切模/销毁后旧菜单的 release 不应继续命中特殊分支，否则会污染新模型的输入账本。
     this.menuSuppressedKeyboardInputs.clear()
+  }
+
+  private adoptExplicitPetAction(accepted: boolean) {
+    if (!accepted) return false
+
+    ++this.petExitGeneration
+    this.pendingSpriteBinding = void 0
+    this.resumePressedBindingsAfterManualAction = this.pressedSpriteBindings.size > 0
+
+    return true
+  }
+
+  private handlePetBehaviorStateChange(state: PetBehaviorState) {
+    if (state !== 'work-idle' || !this.resumePressedBindingsAfterManualAction) return
+
+    queueMicrotask(() => {
+      if (!this.resumePressedBindingsAfterManualAction
+        || this.renderer !== 'sprite'
+        || this.petBehavior.state !== 'work-idle') {
+        return
+      }
+
+      this.resumePressedBindingsAfterManualAction = false
+      sprite.syncPressedKeyboardBindings([...this.pressedSpriteBindings])
+      sprite.resumePressedInputBinding()
+    })
   }
 
   private async playPendingBindingAfterPetExit(generation: number) {

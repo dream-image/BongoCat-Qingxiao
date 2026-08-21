@@ -24,6 +24,10 @@
           "opacity": "Độ mờ",
           "motionSound": "Âm thanh hành động",
           "behavior": "Hành động và Biểu cảm",
+          "petBehavior": "Hành động của Thú cưng",
+          "petActivationDelay": "Độ trễ Kích hoạt Thú cưng",
+          "petMouseInteractions": "Tương tác Chuột với Thú cưng",
+          "modelDefault": "Mặc định của mô hình",
           "autoReleaseDelay": "Độ trễ tự động nhả phím",
           "hideOnHover": "Ẩn khi di chuột",
           "maxFPS": "Tốc độ khung hình tối đa"
@@ -34,6 +38,9 @@
           "ignoreMouse": "Khi bật, mô hình sẽ không phản hồi sự kiện chuột. Hữu ích cho chế độ bàn phím hoặc chế độ tay cầm.",
           "motionSound": "Khi bật, mô hình sẽ phát các âm thanh tương ứng khi thực hiện hành động (nếu tồn tại).",
           "behavior": "Khi bật, các hành động và biểu cảm có thể được cấu hình và kích hoạt.",
+          "petBehavior": "Bật các hành động chủ động và thụ động của mô hình Sprite hiện tại.",
+          "petActivationDelay": "Thời gian không có thao tác bàn phím trước khi vào chế độ thú cưng. Để trống để dùng mặc định của mô hình.",
+          "petMouseInteractions": "Bật tương tác di chuột, nhấp và vuốt ve thú cưng.",
           "passThrough": "Bật để cửa sổ không ảnh hưởng đến thao tác trên ứng dụng khác.",
           "alwaysOnTop": "Bật để cửa sổ luôn nằm trên ứng dụng khác.",
           "keepInScreen": "Khi bật, cửa sổ sẽ tự động giữ trong ranh giới màn hình.",
@@ -191,6 +198,7 @@
     "usePetActionMenu": {
       "title": "Tương tác thú cưng",
       "group": "Hành động",
+      "passive": "Hành động thụ động",
       "unavailable": "Không có hành động khả dụng"
     },
     "useTray": {

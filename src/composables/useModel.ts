@@ -9,9 +9,12 @@ import { isNil, round } from 'es-toolkit'
 import { findKey, nth } from 'es-toolkit/compat'
 import { ref } from 'vue'
 
+import { LANGUAGE } from '@/constants'
 import { useCatStore } from '@/stores/cat'
+import { useGeneralStore } from '@/stores/general'
 import { useModelStore } from '@/stores/model'
 import { getCursorMonitor } from '@/utils/monitor'
+import { getPetActionShortcutId } from '@/utils/pet-action-events'
 import { isMac } from '@/utils/platform'
 
 import modelRuntime from '../utils/model-runtime'
@@ -30,6 +33,7 @@ export interface ModelSize {
 export function useModel() {
   const modelStore = useModelStore()
   const catStore = useCatStore()
+  const generalStore = useGeneralStore()
   const modelSize = ref<ModelSize>()
   // 每次加载/销毁都会推进代次，让较慢的旧异步任务不能覆盖新模型状态。
   let loadGeneration = 0
@@ -115,6 +119,24 @@ export function useModel() {
 
       for (const [index] of expressions.entries()) {
         behaviorIds.push(getExpressionShortcutId(id, index))
+      }
+
+      if (renderer === 'sprite') {
+        const catalog = modelRuntime.getPetActionCatalog(
+          generalStore.appearance.language ?? LANGUAGE.EN_US,
+        )
+
+        for (const group of catalog?.activeGroups ?? []) {
+          for (const action of group.actions) {
+            behaviorIds.push(getPetActionShortcutId(id, action.id))
+          }
+        }
+
+        for (const group of catalog?.passiveGroups ?? []) {
+          for (const action of group.actions) {
+            behaviorIds.push(getPetActionShortcutId(id, action.id))
+          }
+        }
       }
 
       for (const [index, id] of behaviorIds.entries()) {

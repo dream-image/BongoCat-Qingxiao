@@ -4,7 +4,6 @@ import type {
   PetRuntimeAction,
   PetRuntimeIdleTrigger,
   PetRuntimeIntervalTrigger,
-  PetRuntimeManualTrigger,
   PetRuntimePointerTrigger,
   PetRuntimeScheduleTrigger,
   PetRuntimeTrigger,
@@ -66,6 +65,7 @@ export type PetHitArea = PetRectHitArea | PetEllipseHitArea | PetPolygonHitArea
 
 export interface PetAutonomousActionConfig {
   id: string
+  label?: PetLocalizedText
   animation: string
   weight: number
   cooldownMs?: number
@@ -78,6 +78,7 @@ export interface PetAutonomousBehaviorConfig {
 
 interface PetInteractionBaseConfig {
   id: string
+  label?: PetLocalizedText
   area: string
   animation: string
   cooldownMs?: number
@@ -162,7 +163,7 @@ export type PetActionSource
     | 'idle'
     | 'interval'
 
-export interface PetManualActionView {
+export interface PetActionMenuItemView {
   id: string
   label: string
   group: string
@@ -170,12 +171,30 @@ export interface PetManualActionView {
   enabled: boolean
 }
 
-export interface PetActionMenuView {
-  revision: number
-  groups: Array<{
+export interface PetActionCatalogView {
+  activeGroups: Array<{
     label: string
-    actions: PetManualActionView[]
+    actions: PetActionMenuItemView[]
   }>
+  passiveGroups: Array<{
+    id: string
+    label: string
+    actions: PetActionMenuItemView[]
+  }>
+}
+
+export interface PetActionMenuView extends PetActionCatalogView {
+  revision: number
+}
+
+interface PetActionCatalogRequest {
+  actionId: string
+  enterPet: boolean
+}
+
+interface PetActionCatalogBuild {
+  view: PetActionCatalogView
+  requests: Map<string, PetActionCatalogRequest>
 }
 
 export type PetBehaviorTimer = ReturnType<typeof globalThis.setTimeout>
@@ -238,6 +257,7 @@ interface PetActionRequest {
 
 interface ActivePetAction {
   actionId: string
+  source: PetActionSource
   priority: number
   interruptible: boolean
 }
@@ -332,6 +352,8 @@ export class PetBehaviorController {
   private menuPaused = false
   private menuPausedAt: number | undefined
   private selectedMenuAction: string | undefined
+  private readonly menuActionRequests = new Map<string, PetActionCatalogRequest>()
+
   // 多个按键在退出动画期间可能同时到达，共享同一个 Promise 才不会重复播放退出动作。
   private exitingPromise: Promise<boolean> | null = null
 
@@ -738,6 +760,7 @@ export class PetBehaviorController {
 
     if (!playback) {
       this.setState('work-idle')
+      if (this.resumePendingActionFromWorkIdle()) return Promise.resolve(false)
       if (this.canRun()) this.scheduleOperationalTimers()
 
       return Promise.resolve(false)
@@ -750,6 +773,7 @@ export class PetBehaviorController {
       this.exitingPromise = null
       this.setState('work-idle')
 
+      if (this.resumePendingActionFromWorkIdle()) return result.reason === 'finished'
       if (this.canRun()) this.scheduleOperationalTimers()
 
       return result.reason === 'finished'
@@ -759,6 +783,7 @@ export class PetBehaviorController {
       this.exitingPromise = null
       this.setState('work-idle')
 
+      if (this.resumePendingActionFromWorkIdle()) return false
       if (this.canRun()) this.scheduleOperationalTimers()
 
       return false
@@ -772,11 +797,9 @@ export class PetBehaviorController {
   public beginActionMenu(locale = this.context.locale): PetActionMenuView | null {
     if (!this.behaviorConfig || this.destroyed || this.menuPaused) return null
 
-    const manualTriggers = this.moduleTriggers.filter((trigger): trigger is PetRuntimeManualTrigger => {
-      return trigger.type === 'manual'
-    })
+    const catalog = this.buildActionCatalog(locale)
 
-    if (manualTriggers.length === 0) return null
+    if (!catalog) return null
 
     const revision = ++this.catalogRevision
 
@@ -786,62 +809,145 @@ export class PetBehaviorController {
     this.menuPaused = true
     this.passiveEngine.setPaused(true)
     this.selectedMenuAction = void 0
-    this.clearOperationalTimers()
-
-    const groups = new Map<string, PetManualActionView[]>()
-
-    for (const trigger of manualTriggers) {
-      const action = this.moduleActions.get(trigger.actionId)
-
-      if (!action) continue
-
-      const module = this.modules.get(trigger.moduleId)
-      const group = trigger.group
-        ? resolvePetLocalizedText(trigger.group, locale)
-        : resolvePetLocalizedText(module?.displayName ?? 'Pet', locale)
-      const item: PetManualActionView = {
-        id: trigger.id,
-        label: resolvePetLocalizedText(trigger.label, locale),
-        group,
-        // 模块序位乘数大于合法 trigger.order 全跨度，确保局部排序不会越界到相邻模块。
-        order: (module?.order ?? 0) * 100_000 + trigger.order,
-        enabled: this.canAcceptAction(action, 'manual', trigger.enterPet),
-      }
-
-      const entries = groups.get(group) ?? []
-
-      entries.push(item)
-      groups.set(group, entries)
+    this.menuActionRequests.clear()
+    for (const [itemId, request] of catalog.requests) {
+      this.menuActionRequests.set(itemId, request)
     }
+    this.clearOperationalTimers()
 
     return {
       revision,
-      groups: [...groups.entries()]
+      ...catalog.view,
+    }
+  }
+
+  public getActionCatalog(locale = this.context.locale): PetActionCatalogView | null {
+    if (!this.behaviorConfig || this.destroyed) return null
+
+    return this.buildActionCatalog(locale)?.view ?? null
+  }
+
+  public triggerActionCatalogItem(itemId: string) {
+    if (!this.behaviorConfig || this.destroyed || this.menuPaused) return false
+
+    const request = this.buildActionCatalog(this.context.locale)?.requests.get(itemId)
+    const action = request ? this.moduleActions.get(request.actionId) : undefined
+
+    if (!request || !action || !this.canAcceptAction(action, 'manual', request.enterPet)) {
+      return false
+    }
+
+    return this.requestAction(request.actionId, 'manual', request.enterPet)
+  }
+
+  private buildActionCatalog(locale: string): PetActionCatalogBuild | null {
+    const activeGroups = new Map<string, PetActionMenuItemView[]>()
+    const passiveGroups = new Map<string, {
+      label: string
+      actions: PetActionMenuItemView[]
+    }>()
+    const manualActionIds = new Set<string>()
+    const requests = new Map<string, PetActionCatalogRequest>()
+
+    for (const trigger of this.moduleTriggers) {
+      if (trigger.type !== 'manual' || trigger.moduleId === PET_LEGACY_MODULE_ID) continue
+
+      const action = this.moduleActions.get(trigger.actionId)
+      const module = this.modules.get(trigger.moduleId)
+
+      if (!action || !module) continue
+
+      const group = trigger.group
+        ? resolvePetLocalizedText(trigger.group, locale)
+        : resolvePetLocalizedText(module.displayName, locale)
+      const item: PetActionMenuItemView = {
+        id: `manual:${trigger.id}`,
+        label: resolvePetLocalizedText(
+          trigger.label ?? action.label ?? formatPetActionId(action.id),
+          locale,
+        ),
+        group,
+        order: module.order * 100_000 + trigger.order,
+        enabled: this.canAcceptAction(action, 'manual', trigger.enterPet),
+      }
+      const entries = activeGroups.get(group) ?? []
+
+      entries.push(item)
+      activeGroups.set(group, entries)
+      manualActionIds.add(action.id)
+      requests.set(item.id, {
+        actionId: action.id,
+        enterPet: trigger.enterPet,
+      })
+    }
+
+    for (const module of this.modules.values()) {
+      if (module.id === PET_LEGACY_MODULE_ID) continue
+
+      for (const [actionIndex, action] of module.actions.entries()) {
+        if (manualActionIds.has(action.id)) continue
+
+        const group = resolvePetLocalizedText(module.displayName, locale)
+        const item: PetActionMenuItemView = {
+          id: `passive:${action.id}`,
+          label: resolvePetLocalizedText(
+            action.label ?? formatPetActionId(action.id),
+            locale,
+          ),
+          group,
+          order: module.order * 100_000 + actionIndex,
+          enabled: this.canAcceptAction(action, 'manual', true),
+        }
+        const passiveGroup = passiveGroups.get(module.id) ?? {
+          label: group,
+          actions: [],
+        }
+
+        passiveGroup.actions.push(item)
+        passiveGroups.set(module.id, passiveGroup)
+        requests.set(item.id, { actionId: action.id, enterPet: true })
+      }
+    }
+
+    const normalizeGroups = (groups: Map<string, PetActionMenuItemView[]>) => {
+      return [...groups.entries()]
         .map(([label, actions]) => ({
           label,
           actions: actions.sort((left, right) => left.order - right.order),
         }))
         .sort((left, right) => {
           return (left.actions[0]?.order ?? 0) - (right.actions[0]?.order ?? 0)
+        })
+    }
+
+    const view: PetActionCatalogView = {
+      activeGroups: normalizeGroups(activeGroups),
+      passiveGroups: [...passiveGroups.entries()]
+        .map(([id, group]) => ({
+          id,
+          label: group.label,
+          actions: group.actions.sort((left, right) => left.order - right.order),
+        }))
+        .sort((left, right) => {
+          return (left.actions[0]?.order ?? 0) - (right.actions[0]?.order ?? 0)
         }),
     }
+
+    if (view.activeGroups.length === 0 && view.passiveGroups.length === 0) return null
+
+    return { view, requests }
   }
 
-  public selectActionMenuItem(revision: number, triggerId: string) {
+  public selectActionMenuItem(revision: number, itemId: string) {
     if (!this.menuPaused || revision !== this.catalogRevision) return false
 
-    const trigger = this.moduleTriggers.find((candidate): candidate is PetRuntimeManualTrigger => {
-      return candidate.type === 'manual' && candidate.id === triggerId
-    })
-
-    if (!trigger) return false
-
-    const action = this.moduleActions.get(trigger.actionId)
+    const request = this.menuActionRequests.get(itemId)
+    const action = request ? this.moduleActions.get(request.actionId) : undefined
 
     // 菜单打开后输入、冷却或播放状态仍可能变化；选择时必须重新验证快照。
-    if (!action || !this.canAcceptAction(action, 'manual', trigger.enterPet)) return false
+    if (!request || !action || !this.canAcceptAction(action, 'manual', request.enterPet)) return false
 
-    this.selectedMenuAction = triggerId
+    this.selectedMenuAction = itemId
 
     return true
   }
@@ -849,21 +955,23 @@ export class PetBehaviorController {
   public endActionMenu(revision: number) {
     if (!this.menuPaused || revision !== this.catalogRevision) return false
 
-    const selectedTriggerId = this.selectedMenuAction
+    const selectedItemId = this.selectedMenuAction
+    const selectedRequest = selectedItemId
+      ? this.menuActionRequests.get(selectedItemId)
+      : undefined
 
     this.resumeMenuPassiveDeadlines()
     this.menuPaused = false
     this.selectedMenuAction = void 0
+    this.menuActionRequests.clear()
 
     let accepted = false
 
-    if (selectedTriggerId) {
-      const trigger = this.moduleTriggers.find((candidate): candidate is PetRuntimeManualTrigger => {
-        return candidate.type === 'manual' && candidate.id === selectedTriggerId
-      })
-
-      accepted = Boolean(
-        trigger && this.requestAction(trigger.actionId, 'manual', trigger.enterPet),
+    if (selectedRequest) {
+      accepted = this.requestAction(
+        selectedRequest.actionId,
+        'manual',
+        selectedRequest.enterPet,
       )
     }
 
@@ -940,6 +1048,17 @@ export class PetBehaviorController {
     )
   }
 
+  private canRunManualAction() {
+    return Boolean(
+      this.behaviorConfig
+      && this.started
+      && this.context.enabled
+      && this.context.visible
+      && this.context.rendererReady
+      && this.context.renderedVisible,
+    )
+  }
+
   private scheduleActivation() {
     const config = this.behaviorConfig
 
@@ -977,10 +1096,13 @@ export class PetBehaviorController {
     this.activationTimer = timer
   }
 
-  private enterPetMode() {
+  private enterPetMode(source?: PetActionSource) {
     const config = this.behaviorConfig
+    const canEnter = source === 'manual'
+      ? this.canRunManualAction()
+      : this.canRun()
 
-    if (!config || !this.canRun() || this.currentState !== 'work-idle') return
+    if (!config || !canEnter || this.currentState !== 'work-idle') return false
 
     // 任何真正的宠物态进入都已消费工作态激活周期，不能把菜单快照带到下一轮工作空闲期。
     this.pausedActivationRemainingMs = void 0
@@ -993,13 +1115,17 @@ export class PetBehaviorController {
       this.setState('work-idle')
       this.scheduleOperationalTimers()
 
-      return
+      return false
     }
 
     void playback.handle.finished.then((result) => {
       if (!this.isPlaybackCurrent(playback)) return
 
-      if (result.reason !== 'finished' || !this.canRun()) {
+      const canFinishEntering = source === 'manual'
+        ? this.canRunManualAction()
+        : this.canRun()
+
+      if (result.reason !== 'finished' || !canFinishEntering) {
         this.pendingAction = void 0
         this.setState('work-idle')
         if (this.canRun()) this.scheduleOperationalTimers()
@@ -1024,6 +1150,8 @@ export class PetBehaviorController {
       this.setState('work-idle')
       if (this.canRun()) this.scheduleOperationalTimers()
     })
+
+    return true
   }
 
   private requestAction(
@@ -1042,19 +1170,34 @@ export class PetBehaviorController {
       priority: this.sourcePriority(source) + action.priority,
       enterPet,
     }
+    const isExplicitAction = source === 'manual'
 
     if (this.currentState === 'work-idle') {
-      if (!enterPet || !this.queuePendingAction(request)) return false
+      if (!enterPet) return false
+
+      if (isExplicitAction) {
+        this.pendingAction = request
+      } else if (!this.queuePendingAction(request)) {
+        return false
+      }
 
       // schedule/manual 可以主动唤醒宠物；保留 schedule 扫描，只撤掉会与进入动画竞争的计时器。
       this.clearActivationTimer()
       this.clearPassiveTimers()
-      this.enterPetMode()
+      const entered = this.enterPetMode(source)
 
-      return true
+      if (!entered && this.pendingAction === request) this.pendingAction = void 0
+
+      return entered
     }
 
     if (this.currentState === 'pet-entering') {
+      if (isExplicitAction) {
+        this.pendingAction = request
+
+        return true
+      }
+
       return allowPending && this.queuePendingAction(request)
     }
 
@@ -1062,7 +1205,15 @@ export class PetBehaviorController {
       return this.startActionRequest(request)
     }
 
-    if (this.currentState === 'pet-exiting') return false
+    if (this.currentState === 'pet-exiting') {
+      if (!isExplicitAction || !enterPet) return false
+
+      this.pendingAction = request
+
+      return true
+    }
+
+    if (isExplicitAction) return this.startActionRequest(request)
 
     if (this.canPreemptActiveAction(request)) return this.startActionRequest(request)
 
@@ -1077,6 +1228,14 @@ export class PetBehaviorController {
       source,
       priority: this.sourcePriority(source) + action.priority,
       enterPet,
+    }
+
+    if (source === 'manual') {
+      if (this.currentState === 'work-idle' || this.currentState === 'pet-exiting') {
+        return enterPet
+      }
+
+      return true
     }
 
     if (this.currentState === 'pet-exiting') return false
@@ -1169,6 +1328,7 @@ export class PetBehaviorController {
         legacyActions.push({
           id: actionId,
           moduleId: PET_LEGACY_MODULE_ID,
+          label: action.label,
           animation: action.animation,
           priority: 0,
           cooldownMs: action.cooldownMs ?? 0,
@@ -1193,6 +1353,7 @@ export class PetBehaviorController {
       legacyActions.push({
         id: actionId,
         moduleId: PET_LEGACY_MODULE_ID,
+        label: interaction.label,
         animation: interaction.animation,
         priority: 0,
         cooldownMs: interaction.cooldownMs ?? 0,
@@ -1614,7 +1775,7 @@ export class PetBehaviorController {
 
   private isActionOperational(action: PetRuntimeAction, source: PetActionSource) {
     const runtimeReady = source === 'manual'
-      ? this.canRunWithoutKeyboardInput()
+      ? this.canRunManualAction()
       : this.canRun()
 
     if (!runtimeReady || (this.menuPaused && source !== 'manual')) return false
@@ -1626,7 +1787,8 @@ export class PetBehaviorController {
     }
     if (this.moduleActions.get(action.id) !== action) return false
 
-    return this.clock.now() >= (this.cooldowns.get(action.id) ?? 0)
+    return source === 'manual'
+      || this.clock.now() >= (this.cooldowns.get(action.id) ?? 0)
   }
 
   private canQueuePendingAction(request: PetActionRequest) {
@@ -1659,10 +1821,11 @@ export class PetBehaviorController {
   private commitActionStart(request: PetActionRequest) {
     const now = this.clock.now()
 
-    // 冷却在动作被接纳时写入，防止同一帧的菜单和指针事件同时绕过检查。
+    // 显式操作可以随时重播，但仍记录冷却，避免它刚结束就被被动触发器再次选中。
     this.cooldowns.set(request.action.id, now + request.action.cooldownMs)
     this.activePetAction = {
       actionId: request.action.id,
+      source: request.source,
       priority: request.priority,
       interruptible: request.action.interruptible,
     }
@@ -1671,6 +1834,8 @@ export class PetBehaviorController {
   }
 
   private finishCurrentAction(success: boolean) {
+    const activeAction = this.activePetAction
+
     this.activePetAction = void 0
 
     // 驱动异常不应留下与 idle 画面脱节的旧对白；正常结束则允许气泡按自身时长淡出。
@@ -1678,6 +1843,15 @@ export class PetBehaviorController {
 
     if (!this.canRun()) {
       this.pendingAction = void 0
+
+      if (activeAction?.source === 'manual'
+        && this.canRunManualAction()
+        && this.behaviorConfig) {
+        void this.exitForInput()
+
+        return
+      }
+
       this.setState('work-idle')
       this.scheduleOperationalTimers()
 
@@ -1811,6 +1985,7 @@ export class PetBehaviorController {
     this.menuPaused = false
     this.menuPausedAt = void 0
     this.selectedMenuAction = void 0
+    this.menuActionRequests.clear()
     this.pausedActivationRemainingMs = void 0
 
     if (wasPaused) this.passiveEngine.setPaused(false)
@@ -1924,6 +2099,13 @@ function getPassiveActivitySource(inputId: string): PetPassiveActivitySignal['so
   return inputId.startsWith('Gamepad:') ? 'gamepad' : 'keyboard'
 }
 
+function formatPetActionId(actionId: string) {
+  const localId = actionId.slice(actionId.lastIndexOf('/') + 1)
+  const words = localId.replace(/[._-]+/g, ' ')
+
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 export function assertPetBehaviorConfig(
   value: unknown,
   context: PetBehaviorValidationContext,
@@ -1975,6 +2157,7 @@ export function assertPetBehaviorConfig(
 
       assertRecord(action, label)
       assertUniqueId(action.id, ids, `${label}.id`)
+      if (action.label !== void 0) assertLocalizedText(action.label, `${label}.label`)
       assertNonEmptyString(action.animation, `${label}.animation`)
       assertAnimation(action.animation, false, context, `${label}.animation`)
       assertPositiveNumber(action.weight, `${label}.weight`)
@@ -2018,6 +2201,9 @@ export function assertPetBehaviorConfig(
 
       assertRecord(interaction, label)
       assertUniqueId(interaction.id, ids, `${label}.id`)
+      if (interaction.label !== void 0) {
+        assertLocalizedText(interaction.label, `${label}.label`)
+      }
 
       if (interaction.event !== 'hover'
         && interaction.event !== 'tap'
@@ -2174,7 +2360,16 @@ function assertRuntimeModules(
       assertRecord(action, actionLabel)
       assertAllowedKeys(
         action,
-        ['id', 'moduleId', 'animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue'],
+        [
+          'id',
+          'moduleId',
+          'label',
+          'animation',
+          'priority',
+          'cooldownMs',
+          'interruptible',
+          'dialogue',
+        ],
         actionLabel,
       )
       assertQualifiedId(action.id, module.id, `${actionLabel}.id`)
@@ -2187,6 +2382,7 @@ function assertRuntimeModules(
       if (action.moduleId !== module.id) {
         throw new TypeError(`${actionLabel}.moduleId must match its parent module`)
       }
+      if (action.label !== void 0) assertLocalizedText(action.label, `${actionLabel}.label`)
       if (action.animation !== void 0) {
         assertNonEmptyString(action.animation, `${actionLabel}.animation`)
         assertAnimation(action.animation, false, context, `${actionLabel}.animation`)

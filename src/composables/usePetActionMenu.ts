@@ -4,16 +4,16 @@ import { useI18n } from 'vue-i18n'
 
 import modelRuntime from '@/utils/model-runtime'
 
-type PetActionMenuItem = MenuItemOptions | PredefinedMenuItemOptions
+type PetActionMenuItem = MenuItemOptions | PredefinedMenuItemOptions | SubmenuOptions
 
 const PET_ACTION_SUBMENU_ID = 'bongocat.pet-actions'
 
-function getPetActionMenuItemId(triggerId: string) {
-  return `bongocat.pet-action.${encodeURIComponent(triggerId)}`
+function getPetActionMenuItemId(itemId: string) {
+  return `bongocat.pet-action.${encodeURIComponent(itemId)}`
 }
 
-function getPetActionGroupId(groupIndex: number) {
-  return `bongocat.pet-action-group.${groupIndex}`
+function getPetActionGroupId(kind: 'active' | 'passive', groupId: number | string) {
+  return `bongocat.pet-action-group.${kind}.${encodeURIComponent(String(groupId))}`
 }
 
 export function usePetActionMenu() {
@@ -33,32 +33,50 @@ export function usePetActionMenu() {
     }
 
     try {
-      const groups = session?.groups.filter(group => group.actions.length > 0) ?? []
+      const activeGroups = session?.activeGroups.filter(group => group.actions.length > 0) ?? []
+      const passiveGroups = session?.passiveGroups.filter(group => group.actions.length > 0) ?? []
       const items: PetActionMenuItem[] = []
+      const createActionItem = (action: typeof activeGroups[number]['actions'][number]) => {
+        return {
+          id: getPetActionMenuItemId(action.id),
+          text: action.label || action.id,
+          enabled: action.enabled,
+          action: () => {
+            if (session) modelRuntime.selectPetActionMenuAction(session.revision, action.id)
+          },
+        } satisfies MenuItemOptions
+      }
 
-      for (const [groupIndex, group] of groups.entries()) {
+      for (const [groupIndex, group] of activeGroups.entries()) {
         if (groupIndex > 0) {
           items.push({ item: 'Separator' })
         }
 
         items.push({
-          id: getPetActionGroupId(groupIndex),
+          id: getPetActionGroupId('active', groupIndex),
           text: group.label || t('composables.usePetActionMenu.group'),
           enabled: false,
         })
 
-        items.push(...group.actions.map((action) => {
-          return {
-            // 固定 id 让原生事件身份跨多次打开保持可追踪；channel 生命周期仍由外层 root close 统一结束。
-            id: getPetActionMenuItemId(action.id),
-            text: action.label || action.id,
-            enabled: action.enabled,
-            action: () => {
-              // 原生菜单回调只记录选择，等 popup 完全关闭后再由 runtime 播放，避免菜单与动画争用状态。
-              if (session) modelRuntime.selectPetActionMenuAction(session.revision, action.id)
-            },
-          } satisfies MenuItemOptions
-        }))
+        items.push(...group.actions.map(createActionItem))
+      }
+
+      if (passiveGroups.length > 0) {
+        if (items.length > 0) items.push({ item: 'Separator' })
+
+        items.push({
+          id: 'bongocat.pet-action.passive-title',
+          text: t('composables.usePetActionMenu.passive'),
+          enabled: false,
+        })
+
+        for (const [groupIndex, group] of passiveGroups.entries()) {
+          items.push({
+            id: getPetActionGroupId('passive', group.id || groupIndex),
+            text: group.label || t('composables.usePetActionMenu.passive'),
+            items: group.actions.map(createActionItem),
+          } satisfies SubmenuOptions)
+        }
       }
 
       if (items.length === 0) {

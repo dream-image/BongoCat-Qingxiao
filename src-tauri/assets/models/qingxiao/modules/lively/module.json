@@ -50,6 +50,10 @@
   },
   "actions": {
     "startled": {
+      "label": {
+        "zh-CN": "唤她一声",
+        "en-US": "Call her"
+      },
       "animation": "startled",
       "priority": 38,
       "cooldownMs": 4500,
@@ -88,6 +92,10 @@
       }
     },
     "summon-orb": {
+      "label": {
+        "zh-CN": "凝一颗云珠",
+        "en-US": "Summon a cloud orb"
+      },
       "animation": "summon-orb",
       "priority": 24,
       "cooldownMs": 18000,
@@ -119,6 +127,10 @@
       }
     },
     "glissando": {
+      "label": {
+        "zh-CN": "流泉扫弦",
+        "en-US": "Play a glissando"
+      },
       "animation": "glissando",
       "priority": 28,
       "cooldownMs": 7000,
@@ -150,6 +162,10 @@
       }
     },
     "wink-wave": {
+      "label": {
+        "zh-CN": "挥手问候",
+        "en-US": "Wave hello"
+      },
       "animation": "wink-wave",
       "priority": 32,
       "cooldownMs": 15000,
@@ -181,6 +197,10 @@
       }
     },
     "holiday-greeting": {
+      "label": {
+        "zh-CN": "节日问候",
+        "en-US": "Holiday greeting"
+      },
       "animation": "wink-wave",
       "priority": 36,
       "cooldownMs": 21600000,
@@ -212,6 +232,10 @@
       }
     },
     "startup-greeting": {
+      "label": {
+        "zh-CN": "开场问候",
+        "en-US": "Startup greeting"
+      },
       "animation": "wink-wave",
       "priority": 35,
       "cooldownMs": 21600000,
@@ -240,6 +264,10 @@
       }
     },
     "familiar-return": {
+      "label": {
+        "zh-CN": "久别重逢",
+        "en-US": "Welcome back"
+      },
       "animation": "wink-wave",
       "priority": 34,
       "cooldownMs": 21600000,
@@ -268,6 +296,10 @@
       }
     },
     "long-awaited-return": {
+      "label": {
+        "zh-CN": "盼你归来",
+        "en-US": "Long-awaited return"
+      },
       "animation": "startled",
       "priority": 40,
       "cooldownMs": 86400000,
@@ -296,6 +328,10 @@
       }
     },
     "typing-flurry": {
+      "label": {
+        "zh-CN": "快速输入",
+        "en-US": "Typing flurry"
+      },
       "animation": "glissando",
       "priority": 27,
       "cooldownMs": 900000,
@@ -324,6 +360,10 @@
       }
     },
     "gamepad-combo": {
+      "label": {
+        "zh-CN": "手柄连击",
+        "en-US": "Gamepad combo"
+      },
       "animation": "summon-orb",
       "priority": 29,
       "cooldownMs": 1200000,
@@ -352,6 +392,10 @@
       }
     },
     "idle-soft-tune": {
+      "label": {
+        "zh-CN": "闲时轻奏",
+        "en-US": "Idle soft tune"
+      },
       "animation": "glissando",
       "priority": 18,
       "cooldownMs": 360000,
@@ -380,6 +424,10 @@
       }
     },
     "weekday-greeting": {
+      "label": {
+        "zh-CN": "工作日晨安",
+        "en-US": "Weekday greeting"
+      },
       "animation": "wink-wave",
       "priority": 30,
       "cooldownMs": 72000000,
@@ -408,6 +456,10 @@
       }
     },
     "weekend-greeting": {
+      "label": {
+        "zh-CN": "周末晨安",
+        "en-US": "Weekend greeting"
+      },
       "animation": "summon-orb",
       "priority": 29,
       "cooldownMs": 72000000,
@@ -436,6 +488,10 @@
       }
     },
     "friday-release": {
+      "label": {
+        "zh-CN": "周五收工曲",
+        "en-US": "Friday wind-down"
+      },
       "animation": "glissando",
       "priority": 38,
       "cooldownMs": 72000000,
@@ -464,6 +520,10 @@
       }
     },
     "labor-day-greeting": {
+      "label": {
+        "zh-CN": "劳动节问候",
+        "en-US": "Labor Day greeting"
+      },
       "animation": "wink-wave",
       "priority": 39,
       "cooldownMs": 86400000,
@@ -492,6 +552,10 @@
       }
     },
     "ambient-orb": {
+      "label": {
+        "zh-CN": "随手凝珠",
+        "en-US": "Ambient cloud orb"
+      },
       "animation": "summon-orb",
       "priority": 14,
       "cooldownMs": 300000,
@@ -513,6 +577,10 @@
       }
     },
     "ambient-glissando": {
+      "label": {
+        "zh-CN": "随手扫弦",
+        "en-US": "Ambient glissando"
+      },
       "animation": "glissando",
       "priority": 14,
       "cooldownMs": 300000,

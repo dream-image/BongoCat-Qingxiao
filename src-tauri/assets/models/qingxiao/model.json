@@ -255,6 +255,10 @@
       "interactions": [
         {
           "id": "qingxiao-head-hover",
+          "label": {
+            "zh-CN": "靠近看看",
+            "en-US": "Take a closer look"
+          },
           "event": "hover",
           "area": "head",
           "animation": "pet-curious",
@@ -263,6 +267,10 @@
         },
         {
           "id": "qingxiao-head-tap",
+          "label": {
+            "zh-CN": "轻点额头",
+            "en-US": "Tap her forehead"
+          },
           "event": "tap",
           "area": "head",
           "animation": "pet-content",
@@ -272,6 +280,10 @@
         },
         {
           "id": "qingxiao-head-stroke",
+          "label": {
+            "zh-CN": "抚摸头发",
+            "en-US": "Stroke her hair"
+          },
           "event": "stroke",
           "area": "head",
           "animation": "pet-content",
@@ -281,6 +293,10 @@
         },
         {
           "id": "qingxiao-qin-tap",
+          "label": {
+            "zh-CN": "轻点琴弦",
+            "en-US": "Tap the strings"
+          },
           "event": "tap",
           "area": "qin",
           "animation": "pet-chime",
@@ -290,6 +306,10 @@
         },
         {
           "id": "qingxiao-qin-stroke",
+          "label": {
+            "zh-CN": "拂过琴弦",
+            "en-US": "Brush across the strings"
+          },
           "event": "stroke",
           "area": "qin",
           "animation": "pet-chime",

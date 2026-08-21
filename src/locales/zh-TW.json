@@ -24,6 +24,10 @@
           "opacity": "不透明度",
           "motionSound": "動作音效",
           "behavior": "動作與表情",
+          "petBehavior": "寵物動作",
+          "petActivationDelay": "寵物啟動延遲",
+          "petMouseInteractions": "寵物滑鼠互動",
+          "modelDefault": "模型預設",
           "autoReleaseDelay": "按鍵自動釋放延遲",
           "hideOnHover": "滑鼠游標移入隱藏",
           "maxFPS": "最大幀率"
@@ -34,6 +38,9 @@
           "ignoreMouse": "啟用後，模型將不再回應滑鼠事件，適用於鍵盤模式或手柄模式。",
           "motionSound": "啟用後，模型執行動作時會播放對應音效（如果存在）。",
           "behavior": "啟用後，可以配置和觸發模型的動作與表情。",
+          "petBehavior": "啟用目前 Sprite 模型的主動動作與被動動作。",
+          "petActivationDelay": "沒有鍵盤輸入多久後進入寵物狀態；留空時使用模型預設值。",
+          "petMouseInteractions": "啟用後，可以透過懸停、點擊和撫摸與寵物互動。",
           "passThrough": "啟用後，視窗不影響對其他應用程式的操作。",
           "alwaysOnTop": "啟用後，視窗始終顯示在其他應用程式上方。",
           "keepInScreen": "啟用後，視窗會自動調整位置，防止超出螢幕邊界。",
@@ -191,6 +198,7 @@
     "usePetActionMenu": {
       "title": "寵物互動",
       "group": "主動動作",
+      "passive": "被動動作",
       "unavailable": "目前沒有可用動作"
     },
     "useTray": {

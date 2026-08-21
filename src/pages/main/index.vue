@@ -3,6 +3,7 @@ import type { MotionInfo } from 'easy-live2d'
 
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { PhysicalSize } from '@tauri-apps/api/dpi'
+import { emitTo } from '@tauri-apps/api/event'
 import { Menu } from '@tauri-apps/api/menu'
 import { sep } from '@tauri-apps/api/path'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -12,6 +13,13 @@ import { round } from 'es-toolkit'
 import { nth } from 'es-toolkit/compat'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 
+import type {
+  PetActionCatalogRequest,
+  PetActionCatalogResponse,
+  PetActionTriggerRequest,
+  PetActionTriggerResponse,
+} from '@/utils/pet-action-events'
+
 import { useAppMenu } from '@/composables/useAppMenu'
 import { useDevice } from '@/composables/useDevice'
 import { useGamepad } from '@/composables/useGamepad'
@@ -19,7 +27,7 @@ import { useModel } from '@/composables/useModel'
 import { usePetActionMenu } from '@/composables/usePetActionMenu'
 import { usePetPointer } from '@/composables/usePetPointer'
 import { useTauriListen } from '@/composables/useTauriListen'
-import { LISTEN_KEY } from '@/constants'
+import { LISTEN_KEY, WINDOW_LABEL } from '@/constants'
 import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/plugins/window'
 import { useCatStore } from '@/stores/cat'
 import { useGeneralStore } from '@/stores/general.ts'
@@ -196,7 +204,7 @@ watch([
 
   modelRuntime.updatePetRuntimeContext({
     enabled,
-    activationDelayMs,
+    activationDelayMs: activationDelayMs ?? void 0,
     visible,
     mouseInteractions: interactionEnabled,
   })
@@ -223,6 +231,35 @@ useTauriListen<MotionInfo>(LISTEN_KEY.START_MOTION, ({ payload }) => {
 
 useTauriListen<number>(LISTEN_KEY.SET_EXPRESSION, ({ payload }) => {
   modelRuntime.setExpression(payload)
+})
+
+useTauriListen<PetActionCatalogRequest>(LISTEN_KEY.REQUEST_PET_ACTION_CATALOG, async ({ payload }) => {
+  const currentModel = modelStore.currentModel
+  const catalog = currentModel?.id === payload.modelId
+    && currentModel.renderer === 'sprite'
+    && modelStore.modelReady
+    ? modelRuntime.getPetActionCatalog(payload.locale)
+    : null
+
+  await emitTo<PetActionCatalogResponse>(WINDOW_LABEL.PREFERENCE, LISTEN_KEY.PET_ACTION_CATALOG, {
+    requestId: payload.requestId,
+    modelId: payload.modelId,
+    catalog,
+  })
+})
+
+useTauriListen<PetActionTriggerRequest>(LISTEN_KEY.TRIGGER_PET_ACTION, async ({ payload }) => {
+  const currentModel = modelStore.currentModel
+  const accepted = currentModel?.id === payload.modelId
+    && currentModel.renderer === 'sprite'
+    && modelStore.modelReady
+    ? modelRuntime.triggerPetActionCatalogItem(payload.itemId)
+    : false
+
+  await emitTo<PetActionTriggerResponse>(WINDOW_LABEL.PREFERENCE, LISTEN_KEY.PET_ACTION_TRIGGERED, {
+    ...payload,
+    accepted,
+  })
 })
 
 function handleMouseDown(event: MouseEvent) {

@@ -24,6 +24,10 @@
           "opacity": "Opacidade",
           "motionSound": "Som de Ação",
           "behavior": "Movimentos e Expressões",
+          "petBehavior": "Ações do Pet",
+          "petActivationDelay": "Atraso de Ativação do Pet",
+          "petMouseInteractions": "Interações do Pet com o Mouse",
+          "modelDefault": "Padrão do modelo",
           "autoReleaseDelay": "Atraso de Liberação Automática",
           "hideOnHover": "Ocultar ao Passar o Mouse",
           "maxFPS": "Taxa Máxima de Quadros"
@@ -34,6 +38,9 @@
           "ignoreMouse": "Quando ativado, o modelo não responderá a eventos do mouse. Útil para o modo teclado ou modo controle.",
           "motionSound": "Quando ativado, o modelo reproduzirá efeitos sonoros correspondentes ao executar ações (se existirem).",
           "behavior": "Quando ativado, movimentos e expressões podem ser configurados e acionados.",
+          "petBehavior": "Ativa as ações ativas e passivas do modelo Sprite atual.",
+          "petActivationDelay": "Tempo sem entrada do teclado antes de entrar no modo pet. Deixe vazio para usar o padrão do modelo.",
+          "petMouseInteractions": "Ativa interações de passar o mouse, clicar e acariciar o pet.",
           "passThrough": "Quando ativado, a janela não afetará operações em outros aplicativos.",
           "alwaysOnTop": "Quando ativado, a janela sempre ficará acima de outros aplicativos.",
           "keepInScreen": "Quando ativado, a janela permanece automaticamente dentro dos limites da tela.",
@@ -191,6 +198,7 @@
     "usePetActionMenu": {
       "title": "Interações do pet",
       "group": "Ações",
+      "passive": "Ações passivas",
       "unavailable": "Nenhuma ação disponível"
     },
     "useTray": {

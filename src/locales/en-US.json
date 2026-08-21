@@ -24,6 +24,10 @@
           "opacity": "Opacity",
           "motionSound": "Motion Sound",
           "behavior": "Motions and Expressions",
+          "petBehavior": "Pet Behaviors",
+          "petActivationDelay": "Pet Activation Delay",
+          "petMouseInteractions": "Pet Mouse Interactions",
+          "modelDefault": "Model default",
           "autoReleaseDelay": "Auto Release Delay",
           "hideOnHover": "Hide on Hover",
           "maxFPS": "Max Frame Rate"
@@ -34,6 +38,9 @@
           "ignoreMouse": "When enabled, the model will not respond to mouse events. Useful for keyboard mode or gamepad mode.",
           "motionSound": "When enabled, the model will play corresponding sound effects when performing actions (if they exist).",
           "behavior": "When enabled, motions and expressions can be configured and triggered.",
+          "petBehavior": "Enable the current Sprite model's active and passive behaviors.",
+          "petActivationDelay": "How long to wait without keyboard input before entering pet mode. Leave empty to use the model default.",
+          "petMouseInteractions": "Enable hover, click, and stroke interactions with the pet.",
           "passThrough": "When enabled, clicks pass through the window without affecting it.",
           "alwaysOnTop": "When enabled, the window stays above all other windows.",
           "keepInScreen": "When enabled, the window automatically stays within the screen boundaries.",
@@ -191,6 +198,7 @@
     "usePetActionMenu": {
       "title": "Pet Interactions",
       "group": "Actions",
+      "passive": "Passive actions",
       "unavailable": "No actions available"
     },
     "useTray": {

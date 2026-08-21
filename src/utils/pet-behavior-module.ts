@@ -31,6 +31,7 @@ export interface PetModuleV1 {
 }
 
 export interface PetModuleActionV1 {
+  label?: PetLocalizedText
   animation?: string
   priority?: number
   cooldownMs?: number
@@ -197,6 +198,7 @@ export interface PetRuntimeDialogue {
 export interface PetRuntimeAction {
   id: string
   moduleId: string
+  label?: PetLocalizedText
   animation?: string
   priority: number
   cooldownMs: number
@@ -666,9 +668,14 @@ function normalizeActions(
     assertRecord(rawAction, label)
     assertAllowedKeys(
       rawAction,
-      ['animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue'],
+      ['label', 'animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue'],
       label,
     )
+
+    // 非 manual 动作没有 trigger.label，动作自身的可选名称让菜单仍能展示可读文案。
+    const actionDisplayLabel = rawAction.label === undefined
+      ? undefined
+      : normalizeLocalizedText(rawAction.label, `${label}.label`)
 
     let animation: string | undefined
 
@@ -712,6 +719,7 @@ function normalizeActions(
     return {
       id: qualify(moduleId, localId),
       moduleId,
+      label: actionDisplayLabel,
       animation,
       priority: rawAction.priority === undefined
         ? 0

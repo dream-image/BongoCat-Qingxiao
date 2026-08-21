@@ -8,6 +8,10 @@
   "order": 30,
   "actions": {
     "content": {
+      "label": {
+        "zh-CN": "摸摸她",
+        "en-US": "Pat her head"
+      },
       "animation": "@model/pet-content",
       "priority": 30,
       "cooldownMs": 5000,
@@ -39,6 +43,10 @@
       }
     },
     "chime": {
+      "label": {
+        "zh-CN": "请她弹琴",
+        "en-US": "Ask for a tune"
+      },
       "animation": "@model/pet-chime",
       "priority": 28,
       "cooldownMs": 10000,
@@ -70,6 +78,10 @@
       }
     },
     "ambient-chime": {
+      "label": {
+        "zh-CN": "随手一曲",
+        "en-US": "Passing tune"
+      },
       "animation": "@model/pet-chime",
       "priority": 16,
       "cooldownMs": 24000,
@@ -94,6 +106,10 @@
       }
     },
     "doze": {
+      "label": {
+        "zh-CN": "小憩",
+        "en-US": "Take a nap"
+      },
       "animation": "@model/pet-doze",
       "priority": 12,
       "cooldownMs": 16000,
@@ -125,6 +141,10 @@
       }
     },
     "dream": {
+      "label": {
+        "zh-CN": "陪她小憩",
+        "en-US": "Share a quiet rest"
+      },
       "animation": "@model/pet-dream",
       "priority": 14,
       "cooldownMs": 22000,
@@ -156,6 +176,10 @@
       }
     },
     "white-transform": {
+      "label": {
+        "zh-CN": "白色化形",
+        "en-US": "White transformation"
+      },
       "animation": "@model/transform",
       "priority": 42,
       "cooldownMs": 12000,
@@ -180,6 +204,10 @@
       }
     },
     "curious-after-pause": {
+      "label": {
+        "zh-CN": "空闲好奇",
+        "en-US": "Curious after a pause"
+      },
       "animation": "@model/pet-curious",
       "priority": 20,
       "cooldownMs": 240000,
@@ -208,6 +236,10 @@
       }
     },
     "doze-after-ten": {
+      "label": {
+        "zh-CN": "十分钟小憩",
+        "en-US": "Ten-minute doze"
+      },
       "animation": "@model/pet-doze",
       "priority": 14,
       "cooldownMs": 600000,
@@ -236,6 +268,10 @@
       }
     },
     "dream-after-twenty": {
+      "label": {
+        "zh-CN": "二十分钟入梦",
+        "en-US": "Twenty-minute dream"
+      },
       "animation": "@model/pet-dream",
       "priority": 15,
       "cooldownMs": 1200000,
@@ -264,6 +300,10 @@
       }
     },
     "deep-dream-cycle": {
+      "label": {
+        "zh-CN": "深度梦境",
+        "en-US": "Deep dream cycle"
+      },
       "animation": "@model/pet-dream",
       "priority": 13,
       "cooldownMs": 1440000,
@@ -292,6 +332,10 @@
       }
     },
     "midday-rest-window": {
+      "label": {
+        "zh-CN": "午间小憩",
+        "en-US": "Midday rest"
+      },
       "animation": "@model/pet-doze",
       "priority": 19,
       "cooldownMs": 72000000,
@@ -320,6 +364,10 @@
       }
     },
     "evening-chime-window": {
+      "label": {
+        "zh-CN": "晚间琴音",
+        "en-US": "Evening chime"
+      },
       "animation": "@model/pet-chime",
       "priority": 22,
       "cooldownMs": 72000000,

@@ -23,6 +23,11 @@ const firstCardRef = useTemplateRef('firstCard')
 const { height } = useElementSize(firstCardRef)
 const { t } = useI18n()
 const openBehaviorModal = ref(false)
+const behaviorEnabled = computed(() => {
+  return modelStore.currentModel?.renderer === 'sprite'
+    ? catStore.pet.enabled
+    : catStore.model.behavior
+})
 
 const masonryItems = computed(() => {
   const items = modelStore.models.map((item) => {
@@ -97,7 +102,7 @@ async function handleDelete(item: Model) {
           />
 
           <i
-            v-if="catStore.model.behavior && modelStore.currentModel?.id === data.id"
+            v-if="behaviorEnabled && modelStore.currentModel?.id === data.id"
             class="i-lucide:smile"
             @click.stop="openBehaviorModal = true"
           />
@@ -128,7 +133,7 @@ async function handleDelete(item: Model) {
   <FloatMenu />
 
   <BehaviorModal
-    v-if="catStore.model.behavior"
+    v-if="behaviorEnabled"
     v-model="openBehaviorModal"
   />
 </template>

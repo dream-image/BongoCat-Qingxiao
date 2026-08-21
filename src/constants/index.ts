@@ -12,6 +12,10 @@ export const LISTEN_KEY = {
   GAMEPAD_CHANGED: 'gamepad-changed',
   START_MOTION: 'start-motion',
   SET_EXPRESSION: 'set-expression',
+  REQUEST_PET_ACTION_CATALOG: 'request-pet-action-catalog',
+  PET_ACTION_CATALOG: 'pet-action-catalog',
+  TRIGGER_PET_ACTION: 'trigger-pet-action',
+  PET_ACTION_TRIGGERED: 'pet-action-triggered',
 }
 
 export const INVOKE_KEY = {
