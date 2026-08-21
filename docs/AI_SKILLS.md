@@ -1,0 +1,106 @@
+# 项目内置 AI Skills 使用指南
+
+> 更新时间：2026-08-22
+>
+> 适用仓库：BongoCat · 清宵桌宠扩展版
+
+本项目在 [`.agents/skills`](../.agents/skills/) 中维护了两套项目级 AI Skill，用于把角色素材和行为设计转换为 BongoCat 可以直接导入的完整 Sprite 模型。Skill 会以仓库当前的 TypeScript 类型、校验器和清宵模型为事实来源，因此比脱离项目编写的通用提示词更可靠。
+
+## 两个 Skill 的分工
+
+### `$build-bongocat-sprite-model`
+
+入口：[`.agents/skills/build-bongocat-sprite-model/SKILL.md`](../.agents/skills/build-bongocat-sprite-model/SKILL.md)
+
+适合以下任务：
+
+- 根据人物全身图、立绘或设定图制作新的桌宠模型；
+- 建立统一的透明背景基准帧；
+- 制作待机、键盘、鼠标、手柄或变身雪碧图；
+- 修复 AI 动画常见的抖动、闪烁、轮廓漂移和残影；
+- 配置 `model.json`，并在真实应用中验证导入、切换和输入响应。
+
+它的主要交付物是一个基础模型目录，目录根部必须包含 `model.json`，同时包含封面、雪碧图和必要的可复现参考素材。
+
+### `$author-bongocat-action-modules`
+
+入口：[`.agents/skills/author-bongocat-action-modules/SKILL.md`](../.agents/skills/author-bongocat-action-modules/SKILL.md)
+
+适合以下任务：
+
+- 为已有 Sprite 模型设计更真实、活泼、可爱或傲娇的宠物动作；
+- 增加右键菜单可以主动执行的动作；
+- 增加空闲、时间、日期、会话、输入活跃度和持续工作等被动触发；
+- 为动作配置对白气泡、优先级、冷却、打断规则和菜单分组；
+- 生成完整模型目录，并检查动画、动作和触发器之间的引用关系。
+
+它生成的是完整可导入模型，而不是孤立的 `module.json`。主动动作会进入右键菜单第二级；被动动作会按触发类型进入第三级。如果一个被动动作也需要手动执行，应为同一个 action 另外声明一个 `manual` trigger。
+
+## 推荐使用顺序
+
+1. 如果只有角色参考图，先调用 `$build-bongocat-sprite-model`，建立能够被应用加载的基础 Sprite 模型。
+2. 在基础模型通过导入、切换和输入验证后，调用 `$author-bongocat-action-modules` 设计角色性格和动作矩阵。
+3. 让 AI 输出完整模型目录，并运行 Skill 附带的结构校验器。
+4. 通过“设置 → 模型管理 → 导入”走一遍真实导入链路。
+5. 在宠物窗口逐项验证右键菜单、主动动作、被动触发、对白、键盘打断和模型切换。
+
+已有且可正常加载的 Sprite 模型，可以跳过第一步。Live2D 模型不能直接使用当前 Sprite 动作模组运行时，需要先制作单独的 Sprite 模型。
+
+## 调用示例
+
+从角色参考图创建新模型：
+
+```text
+使用 $build-bongocat-sprite-model，根据我提供的角色参考图生成一个可导入的 BongoCat Sprite 模型。常态保持睁眼，键盘输入时演奏古琴，并完成真实应用导入验证。
+```
+
+为已有模型增加行为：
+
+```text
+使用 $author-bongocat-action-modules，为这个 Sprite 模型设计一套符合角色性格的主动和被动动作。加入右键菜单、对白气泡、空闲与时间触发，最后交付完整可导入模型目录和 QA 报告。
+```
+
+扩展清宵现有模组：
+
+```text
+使用 $author-bongocat-action-modules，在清宵已有模型上增加节日问候和久别归来动作。复用现有动画优先，不修改应用代码，并验证主动菜单为二级、被动菜单为三级。
+```
+
+调用时应同时提供角色参考图、性格描述、希望支持的交互方式以及目标平台。若需求没有指定细节，Skill 会根据现有模型和项目约束选择保守默认值。
+
+## 产物和验证边界
+
+一个可交付模型至少应包含：
+
+```text
+<model-id>/
+├── model.json
+├── resources/
+│   └── cover.png
+├── sprites/
+├── modules/              # 使用动作模组时需要
+└── references/           # 建议保留基准帧和不可变参考素材
+```
+
+动作模组 Skill 附带了初步包校验器：
+
+```shell
+BONGOCAT_PYTHON="/absolute/path/to/python3"
+"$BONGOCAT_PYTHON" .agents/skills/author-bongocat-action-modules/scripts/validate_model_package.py \
+  /absolute/path/to/model \
+  --report /absolute/path/to/qa/model-package-report.json
+```
+
+AI 应先通过工作区依赖加载能力取得 Python 路径，不要把某台开发机器的路径写进脚本或模型。该校验器负责检查目录结构、安全路径、JSON 引用、动画网格、生命周期、动作、触发器、对白锚点和封面；它不能替代应用自身校验和人工视觉验收。
+
+最终必须在真实应用中验证：
+
+- 模型能够导入、切换并在重启后继续加载；
+- 雪碧图没有闪烁、漂移、残影或错误闭眼；
+- 主动和被动动作出现在正确的菜单层级且均可执行；
+- 自动触发频率合理，不干扰键盘、鼠标和手柄输入；
+- 对白位置、镜像、窗口缩放、动作中断和清理均正常。
+
+## 维护约定
+
+仓库代码始终是最终契约。如果 `model.json`、动作模块、触发器、菜单层级或导入校验发生变化，应同步更新对应 Skill 的 `SKILL.md`、`references/` 和校验脚本，再更新本文档。不要把特定角色的 action id 硬编码到 Vue、TypeScript、Rust 或原生菜单代码中。

@@ -1,0 +1,4 @@
+interface:
+  display_name: BongoCat 动作模组生成
+  short_description: 设计并生成可直接导入的桌宠模型与动作模组
+  default_prompt: 使用 $author-bongocat-action-modules 为这个角色设计动作，并生成经过验证、可直接导入 BongoCat 的完整模型目录。

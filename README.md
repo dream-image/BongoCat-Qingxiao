@@ -81,8 +81,20 @@ src-tauri/assets/models/qingxiao/
 
 新增模组时应优先使用数据配置：在 `modules/<module-id>/module.json` 中声明动画、动作和触发器，再由模型的 `behaviors.pet.modules` 引用。不要在 Vue 页面、TypeScript 菜单或运行时控制器中硬编码某个角色的 action id。
 
+## 项目附带的 AI Skills
+
+仓库在 `.agents/skills/` 中附带了两套面向 Codex 等 AI 工程代理的项目级 Skill。它们会先读取当前代码中的模型契约，再生成可由“设置 → 模型管理 → 导入”加载的完整模型目录。
+
+| Skill                                                                                         | 适用场景                                                                                         |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [`$build-bongocat-sprite-model`](./.agents/skills/build-bongocat-sprite-model/SKILL.md)       | 根据角色参考图建立基础 Sprite 模型，制作待机、键鼠和变身动画，并完成雪碧图稳定化与视觉验收。     |
+| [`$author-bongocat-action-modules`](./.agents/skills/author-bongocat-action-modules/SKILL.md) | 为已有 Sprite 模型设计主动、被动、指针、日程和对白动作模组，生成右键菜单配置与完整可导入模型包。 |
+
+新角色应先使用 `$build-bongocat-sprite-model` 建立可正常加载的基础模型，再使用 `$author-bongocat-action-modules` 扩展宠物行为；已有 Sprite 模型可以直接从第二个 Skill 开始。详细的调用示例、产物边界和验证要求见 [项目内置 AI Skills 使用指南](./docs/AI_SKILLS.md)。
+
 ## 维护文档
 
+- [项目内置 AI Skills 使用指南](./docs/AI_SKILLS.md)
 - [清宵动作模组、触发器与资源约束](./docs/maintenance/2026-08-21-qingxiao-pet-action-modules.md)
 - [宠物行为、输入链路与模型切换交接记录](./docs/maintenance/2026-08-21-pet-behavior-hardening.md)
 - [上游下载指南](./.github/DOWNLOAD_GUIDE.md)
