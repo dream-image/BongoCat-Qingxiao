@@ -9,7 +9,8 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import { inBetween } from '@/utils/is'
 import modelRuntime from '@/utils/model-runtime'
 import { isMac, isWindows } from '@/utils/platform'
@@ -68,7 +69,8 @@ const MOUSE_ACTIVITY_MIN_DISTANCE = 24
 const appWindow = getCurrentWebviewWindow()
 
 export function useDevice() {
-  const modelStore = useModelStore()
+  const modelRuntimeStore = useModelRuntimeStore()
+  const modelSelectionStore = useModelSelectionStore()
   const releaseTimers = new Map<string, NodeJS.Timeout>()
   const pressedKeyboardInputs = new Map<string, PressedKeyboardInput>()
   const pressedMouseButtons = new Set<string>()
@@ -283,11 +285,11 @@ export function useDevice() {
 
   const getSupportedKey = (key: string) => {
     // sprite 自己负责按键分组；Live2D 缺少左右修饰键/Fn 资源时才回退到通用键。
-    if (modelStore.currentModel?.renderer === 'sprite') return key
+    if (modelSelectionStore.currentModel?.renderer === 'sprite') return key
 
     let nextKey = key
 
-    const unsupportedKey = !modelStore.supportKeys[nextKey]
+    const unsupportedKey = !modelRuntimeStore.supportKeys[nextKey]
 
     if (key.startsWith('F') && unsupportedKey) {
       nextKey = key.replace(/F(\d+)/, 'Fn')
@@ -629,7 +631,7 @@ export function useDevice() {
     code: string,
     label?: string | null,
   ) => {
-    if (modelStore.modelReady) return handleKeyboardPress(inputId, code, label)
+    if (modelRuntimeStore.modelReady) return handleKeyboardPress(inputId, code, label)
 
     // 渲染器未就绪时仍登记真实输入，既保护 idle 门禁，也供加载完成后无缝 remap。
     const activeInput = pressedKeyboardInputs.get(inputId)

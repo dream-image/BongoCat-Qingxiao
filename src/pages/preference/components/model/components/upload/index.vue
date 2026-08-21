@@ -12,14 +12,14 @@ import { useI18n } from 'vue-i18n'
 import type { ValidatedModelDirectory } from '@/utils/model-validation'
 
 import { INVOKE_KEY } from '@/constants'
-import { useModelStore } from '@/stores/model'
+import { useModelRegistryStore } from '@/stores/model'
 import { validateModelDirectory } from '@/utils/model-validation'
 import { join } from '@/utils/path'
 
 const dropRef = useTemplateRef('drop')
 const dragenter = ref(false)
 const selectPaths = ref<string[]>([])
-const modelStore = useModelStore()
+const modelRegistryStore = useModelRegistryStore()
 const { t } = useI18n()
 
 onMounted(() => {
@@ -79,19 +79,21 @@ watch(selectPaths, async (paths) => {
         if (storedModel.renderer !== detectedModel.renderer) {
           throw new Error('Model renderer changed while importing')
         }
+
+        // 成功提示必须等注册表的 saveNow 确认；注册或落盘失败由 store 回滚旧快照。
+        await modelRegistryStore.registerCustomModel({
+          id,
+          path: toPath,
+          mode: storedModel.mode,
+          renderer: storedModel.renderer,
+          displayName: storedModel.displayName,
+          isPreset: false,
+        })
       } catch (error) {
+        // 复制目录与注册表必须同生共死，不能留下未注册的孤儿模型。
         await remove(toPath, { recursive: true }).catch(() => {})
         throw error
       }
-
-      modelStore.models.push({
-        id,
-        path: toPath,
-        mode: storedModel.mode,
-        renderer: storedModel.renderer,
-        displayName: storedModel.displayName,
-        isPreset: false,
-      })
 
       message.success(t('pages.preference.model.hints.importSuccess'))
     } catch (error) {

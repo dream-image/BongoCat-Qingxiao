@@ -12,7 +12,9 @@ import { ref } from 'vue'
 import { LANGUAGE } from '@/constants'
 import { useCatStore } from '@/stores/cat'
 import { useGeneralStore } from '@/stores/general'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
+import { useModelShortcutStore } from '@/stores/model-shortcut'
 import { getCursorMonitor } from '@/utils/monitor'
 import { getPetActionShortcutId } from '@/utils/pet-action-events'
 import { isMac } from '@/utils/platform'
@@ -33,7 +35,9 @@ export interface ModelSize {
 export type ModelLoadOutcome = 'failed' | 'loaded' | 'superseded'
 
 export function useModel() {
-  const modelStore = useModelStore()
+  const modelRuntimeStore = useModelRuntimeStore()
+  const modelSelectionStore = useModelSelectionStore()
+  const modelShortcutStore = useModelShortcutStore()
   const catStore = useCatStore()
   const generalStore = useGeneralStore()
   const modelSize = ref<ModelSize>()
@@ -78,20 +82,20 @@ export function useModel() {
 
   async function handleLoad(): Promise<ModelLoadOutcome> {
     const generation = ++loadGeneration
-    const currentModel = modelStore.currentModel
+    const currentModel = modelSelectionStore.currentModel
 
     // 模型与窗口尺寸全部就绪前禁止宠物行为，避免动作发给正在销毁或尚未挂载的渲染器。
     modelRuntime.updatePetRuntimeContext({ rendererReady: false })
     modelSize.value = void 0
-    modelStore.currentMotions = []
-    modelStore.currentExpressions = []
+    modelRuntimeStore.currentMotions = []
+    modelRuntimeStore.currentExpressions = []
 
     if (!currentModel) return 'failed'
 
     const { id, path, renderer } = currentModel
     // 不只比较代次，也比较模型身份，防止对象被原地更新时旧结果误提交。
     const isCurrent = () => {
-      const model = modelStore.currentModel
+      const model = modelSelectionStore.currentModel
 
       return generation === loadGeneration
         && model?.id === id
@@ -142,7 +146,7 @@ export function useModel() {
       }
 
       for (const [index, id] of behaviorIds.entries()) {
-        if (modelStore.shortcuts[id]) continue
+        if (modelShortcutStore.shortcuts[id]) continue
 
         const shortcut = getBehaviorShortcut(index)
 
@@ -154,11 +158,11 @@ export function useModel() {
       if (!isCurrent()) return 'superseded'
 
       modelSize.value = nextModelSize
-      modelStore.currentMotions = nextMotions
-      modelStore.currentExpressions = expressions
+      modelRuntimeStore.currentMotions = nextMotions
+      modelRuntimeStore.currentExpressions = expressions
 
       for (const [shortcutId, shortcut] of nextShortcuts) {
-        modelStore.shortcuts[shortcutId] = shortcut
+        modelShortcutStore.shortcuts[shortcutId] = shortcut
       }
 
       if (!await handleResize(generation, nextModelSize)) {
@@ -253,19 +257,19 @@ export function useModel() {
   }
 
   const setPressedRenderKey = (renderKey: string) => {
-    const path = modelStore.supportKeys[renderKey]
+    const path = modelRuntimeStore.supportKeys[renderKey]
 
     if (!path) return
 
     const dirName = nth(path.split(sep()), -2)!
-    const prevKey = findKey(modelStore.pressedKeys, (value) => {
+    const prevKey = findKey(modelRuntimeStore.pressedKeys, (value) => {
       return value.includes(dirName)
     })
 
     // 同一只手的贴图只能显示一张；切键时替换旧贴图，不能误释放对应的物理按键。
-    if (prevKey && prevKey !== renderKey) delete modelStore.pressedKeys[prevKey]
+    if (prevKey && prevKey !== renderKey) delete modelRuntimeStore.pressedKeys[prevKey]
 
-    modelStore.pressedKeys[renderKey] = path
+    modelRuntimeStore.pressedKeys[renderKey] = path
   }
 
   const handlePress = (key: string, label?: string | null, inputId = key) => {
@@ -277,8 +281,8 @@ export function useModel() {
 
   const syncPressedRenderKeys = (renderKeys: Iterable<string>) => {
     // 多个物理输入可能共享同一 renderKey，因此以 runtime 的完整快照重建最安全。
-    for (const key of Object.keys(modelStore.pressedKeys)) {
-      delete modelStore.pressedKeys[key]
+    for (const key of Object.keys(modelRuntimeStore.pressedKeys)) {
+      delete modelRuntimeStore.pressedKeys[key]
     }
 
     for (const renderKey of renderKeys) setPressedRenderKey(renderKey)
@@ -289,7 +293,7 @@ export function useModel() {
 
     // trackInput=false 只撤销视觉状态，用于模型过渡，不能改变仍按住的物理输入集合。
     if (!trackInput) {
-      if (result.renderStateChanged) delete modelStore.pressedKeys[result.key]
+      if (result.renderStateChanged) delete modelRuntimeStore.pressedKeys[result.key]
 
       return
     }

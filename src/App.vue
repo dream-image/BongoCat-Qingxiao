@@ -19,11 +19,17 @@ import { hideWindow, showWindow } from './plugins/window'
 import { useAppStore } from './stores/app'
 import { useCatStore } from './stores/cat'
 import { useGeneralStore } from './stores/general'
-import { useModelStore } from './stores/model'
+import { useModelRegistryStore } from './stores/model'
+import { useModelRuntimeStore } from './stores/model-runtime'
+import { useModelSelectionStore } from './stores/model-selection'
+import { useModelShortcutStore } from './stores/model-shortcut'
 import { useShortcutStore } from './stores/shortcut.ts'
 
 const appStore = useAppStore()
-const modelStore = useModelStore()
+const modelRegistryStore = useModelRegistryStore()
+const modelRuntimeStore = useModelRuntimeStore()
+const modelSelectionStore = useModelSelectionStore()
+const modelShortcutStore = useModelShortcutStore()
 const catStore = useCatStore()
 const generalStore = useGeneralStore()
 const shortcutStore = useShortcutStore()
@@ -35,8 +41,17 @@ const { locale } = useI18n()
 onMounted(async () => {
   await appStore.$tauri.start()
   await appStore.init()
-  await modelStore.$tauri.start()
-  await modelStore.init()
+  // 注册表先完成旧快照迁移和磁盘复验，其他域才能安全解析选择与快捷键。
+  await modelRegistryStore.$tauri.start()
+  const modelInitContext = await modelRegistryStore.init()
+  await modelSelectionStore.$tauri.start()
+  modelSelectionStore.init(modelInitContext.legacyCurrentModel)
+  await modelShortcutStore.$tauri.start()
+  await modelShortcutStore.init(
+    modelInitContext.legacyShortcuts,
+    modelInitContext.previousModels,
+  )
+  await modelRuntimeStore.$tauri.start()
   await catStore.$tauri.start()
   catStore.init()
   await generalStore.$tauri.start()

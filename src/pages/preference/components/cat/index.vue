@@ -5,13 +5,13 @@ import { computed } from 'vue'
 import ProListItem from '@/components/pro-list-item/index.vue'
 import ProList from '@/components/pro-list/index.vue'
 import { useCatStore } from '@/stores/cat'
-import { useModelStore } from '@/stores/model'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import { isWindows } from '@/utils/platform'
 
 const catStore = useCatStore()
-const modelStore = useModelStore()
+const modelSelectionStore = useModelSelectionStore()
 
-const isSpriteModel = computed(() => modelStore.currentModel?.renderer === 'sprite')
+const isSpriteModel = computed(() => modelSelectionStore.currentModel?.renderer === 'sprite')
 const petActivationDelaySeconds = computed<number | null>({
   get: () => catStore.pet.activationDelayMs === null
     ? null

@@ -8,7 +8,7 @@ import UpdateApp from '@/components/update-app/index.vue'
 import { useTray } from '@/composables/useTray'
 import { useAppStore } from '@/stores/app'
 import { useGeneralStore } from '@/stores/general'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
 import { isMac } from '@/utils/platform'
 
 import About from './components/about/index.vue'
@@ -22,7 +22,7 @@ const appStore = useAppStore()
 const current = ref(0)
 const { t } = useI18n()
 const generalStore = useGeneralStore()
-const modelStore = useModelStore()
+const modelRuntimeStore = useModelRuntimeStore()
 const appWindow = getCurrentWebviewWindow()
 
 watch(() => generalStore.appearance.language, () => {
@@ -69,7 +69,7 @@ const menus = computed(() => [
     :description="t('pages.main.hints.switching')"
     fullscreen
     size="large"
-    :spinning="!modelStore.modelReady"
+    :spinning="!modelRuntimeStore.modelReady"
   />
 
   <Flex class="h-screen">

@@ -4,7 +4,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { computed, onUnmounted, reactive, watch } from 'vue'
 
 import { INVOKE_KEY, LISTEN_KEY } from '@/constants'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import modelRuntime from '@/utils/model-runtime'
 
 import { useModel } from './useModel'
@@ -36,7 +37,8 @@ const STICK_ACTIVITY_ENTER_THRESHOLD = 0.18
 const STICK_ACTIVITY_EXIT_THRESHOLD = 0.10
 
 export function useGamepad() {
-  const modelStore = useModelStore()
+  const modelRuntimeStore = useModelRuntimeStore()
+  const modelSelectionStore = useModelSelectionStore()
   const { handlePress, handleRelease, handleAxisChange } = useModel()
   const sticks = reactive<Sticks>({
     left: { ...INITIAL_STICK_STATE },
@@ -83,7 +85,7 @@ export function useGamepad() {
     modelRuntime.setParameterValue('CatParamStickRightDown', false)
   }
 
-  watch(() => modelStore.currentModel?.mode, (mode) => {
+  watch(() => modelSelectionStore.currentModel?.mode, (mode) => {
     gamepadModeActive = mode === 'gamepad'
 
     if (!gamepadModeActive) releaseGamepadState()
@@ -101,7 +103,7 @@ export function useGamepad() {
     void invoke(INVOKE_KEY.STOP_GAMEPAD_LISTING).catch(() => void 0)
   })
 
-  watch(() => modelStore.modelReady, (ready) => {
+  watch(() => modelRuntimeStore.modelReady, (ready) => {
     if (!ready || !gamepadModeActive) return
 
     // 模型切换会重建渲染器；重放仍有效的摇杆状态，而不是等待下一次硬件事件。

@@ -32,7 +32,9 @@ import { LISTEN_KEY, WINDOW_LABEL } from '@/constants'
 import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/plugins/window'
 import { useCatStore } from '@/stores/cat'
 import { useGeneralStore } from '@/stores/general.ts'
-import { useModelStore } from '@/stores/model'
+import { useModelRegistryStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import { isImage } from '@/utils/is'
 import modelRuntime from '@/utils/model-runtime'
 import { join } from '@/utils/path'
@@ -49,7 +51,9 @@ const petPointer = usePetPointer(
 const catStore = useCatStore()
 const { getBaseMenu, getExitMenu } = useAppMenu()
 const { beginPetActionMenu } = usePetActionMenu()
-const modelStore = useModelStore()
+const modelRegistryStore = useModelRegistryStore()
+const modelRuntimeStore = useModelRuntimeStore()
+const modelSelectionStore = useModelSelectionStore()
 const generalStore = useGeneralStore()
 const resizing = ref(false)
 const backgroundImagePath = ref<string>()
@@ -76,7 +80,7 @@ function isSameModel(left: Model | undefined, right: Model) {
 
 function recoverFromModelLoadFailure(model: Model, generation: number) {
   if (generation !== modelLoadGeneration
-    || !isSameModel(modelStore.currentModel, model)) {
+    || !isSameModel(modelSelectionStore.currentModel, model)) {
     return
   }
 
@@ -93,11 +97,11 @@ function recoverFromModelLoadFailure(model: Model, generation: number) {
 
   const renderedModel = lastRenderedModel
   const previous = renderedModel
-    ? modelStore.models.find(item => isSameModel(item, renderedModel))
+    ? modelRegistryStore.models.find(item => isSameModel(item, renderedModel))
     : undefined
   const candidates = [
     previous,
-    ...modelStore.models.filter(item => item.isPreset),
+    ...modelRegistryStore.models.filter(item => item.isPreset),
   ].filter((item): item is Model => item !== undefined)
   const nextModel = candidates.find((candidate) => {
     return !state.attemptedModelKeys.has(getModelKey(candidate))
@@ -106,13 +110,13 @@ function recoverFromModelLoadFailure(model: Model, generation: number) {
   if (nextModel) {
     // expectedModelKey 把自动回退链与用户的新选择区分开，旧失败不能回滚后来的点击。
     state.expectedModelKey = getModelKey(nextModel)
-    modelStore.currentModel = nextModel
+    modelSelectionStore.currentModel = nextModel
 
     return
   }
 
   recoveryState = undefined
-  modelStore.currentModel = undefined
+  modelSelectionStore.currentModel = undefined
 }
 
 onMounted(startListening)
@@ -131,7 +135,7 @@ const debouncedResize = useDebounceFn(async (generation: number, loadGeneration:
 
   resizing.value = false
 
-  if (resized && modelStore.modelReady) {
+  if (resized && modelRuntimeStore.modelReady) {
     modelRuntime.updatePetRuntimeContext({ rendererReady: true })
   }
 }, 100)
@@ -146,7 +150,7 @@ useEventListener('resize', () => {
   debouncedResize(generation, modelLoadGeneration)
 })
 
-watch(() => modelStore.currentModel, async (model) => {
+watch(() => modelSelectionStore.currentModel, async (model) => {
   const generation = ++modelLoadGeneration
 
   ++resizeGeneration
@@ -154,16 +158,16 @@ watch(() => modelStore.currentModel, async (model) => {
   // 先保留物理按压并撤掉旧视觉映射，待新模型资源表完成后再映射回来。
   prepareModelTransition()
   petPointer.reset()
-  modelStore.modelReady = false
+  modelRuntimeStore.modelReady = false
   modelRuntime.updatePetRuntimeContext({ rendererReady: false })
   backgroundImagePath.value = void 0
-  clearObject([modelStore.supportKeys, modelStore.pressedKeys])
+  clearObject([modelRuntimeStore.supportKeys, modelRuntimeStore.pressedKeys])
 
   if (!model) {
     recoveryState = undefined
     handleDestroy()
     // 没有任何可加载模型时结束过渡态，设置窗口仍可用于重新导入或修复模型。
-    modelStore.modelReady = true
+    modelRuntimeStore.modelReady = true
 
     return
   }
@@ -182,7 +186,7 @@ watch(() => modelStore.currentModel, async (model) => {
   const { id, path: modelPath, renderer } = model
   // 深度 watch 可能在同一模型对象上触发，身份字段与代次一起核验才可靠。
   const isCurrent = () => {
-    const current = modelStore.currentModel
+    const current = modelSelectionStore.currentModel
 
     return generation === modelLoadGeneration
       && current?.id === id
@@ -226,11 +230,11 @@ watch(() => modelStore.currentModel, async (model) => {
   if (!isCurrent()) return
 
   backgroundImagePath.value = nextBackgroundImagePath
-  clearObject([modelStore.supportKeys])
-  Object.assign(modelStore.supportKeys, nextSupportKeys)
+  clearObject([modelRuntimeStore.supportKeys])
+  Object.assign(modelRuntimeStore.supportKeys, nextSupportKeys)
   // supportKeys 完整提交后才能重映射持续按住的键，否则会错误回退或丢贴图。
   remapPressedKeyboardInputs()
-  modelStore.modelReady = true
+  modelRuntimeStore.modelReady = true
   lastRenderedModel = { ...model }
   recoveryState = undefined
 
@@ -253,7 +257,7 @@ watch([() => catStore.window.scale, modelSize], async ([scale, modelSize]) => {
   )
 }, { immediate: true })
 
-watch([modelStore.pressedKeys, stickActive], ([keys, stickActive]) => {
+watch([modelRuntimeStore.pressedKeys, stickActive], ([keys, stickActive]) => {
   const dirs = Object.values(keys).map((path) => {
     return nth(path.split(sep()), -2)!
   })
@@ -315,10 +319,10 @@ useTauriListen<number>(LISTEN_KEY.SET_EXPRESSION, ({ payload }) => {
 })
 
 useTauriListen<PetActionCatalogRequest>(LISTEN_KEY.REQUEST_PET_ACTION_CATALOG, async ({ payload }) => {
-  const currentModel = modelStore.currentModel
+  const currentModel = modelSelectionStore.currentModel
   const catalog = currentModel?.id === payload.modelId
     && currentModel.renderer === 'sprite'
-    && modelStore.modelReady
+    && modelRuntimeStore.modelReady
     ? modelRuntime.getPetActionCatalog(payload.locale)
     : null
 
@@ -330,10 +334,10 @@ useTauriListen<PetActionCatalogRequest>(LISTEN_KEY.REQUEST_PET_ACTION_CATALOG, a
 })
 
 useTauriListen<PetActionTriggerRequest>(LISTEN_KEY.TRIGGER_PET_ACTION, async ({ payload }) => {
-  const currentModel = modelStore.currentModel
+  const currentModel = modelSelectionStore.currentModel
   const accepted = currentModel?.id === payload.modelId
     && currentModel.renderer === 'sprite'
-    && modelStore.modelReady
+    && modelRuntimeStore.modelReady
     ? modelRuntime.triggerPetActionCatalogItem(payload.itemId)
     : false
 
@@ -415,7 +419,7 @@ function handleMouseMove(event: MouseEvent) {
 <template>
   <div
     class="relative size-screen overflow-hidden children:(absolute size-full)"
-    :class="{ '-scale-x-100': catStore.model.mirror && modelStore.currentModel?.renderer !== 'sprite' }"
+    :class="{ '-scale-x-100': catStore.model.mirror && modelSelectionStore.currentModel?.renderer !== 'sprite' }"
     :style="{
       opacity: catStore.window.opacity / 100,
       borderRadius: `${catStore.window.radius}%`,
@@ -436,24 +440,24 @@ function handleMouseMove(event: MouseEvent) {
     >
 
     <canvas
-      v-show="modelStore.currentModel?.renderer !== 'sprite'"
+      v-show="modelSelectionStore.currentModel?.renderer !== 'sprite'"
       id="live2dCanvas"
     />
 
     <canvas
-      v-show="modelStore.currentModel?.renderer === 'sprite'"
+      v-show="modelSelectionStore.currentModel?.renderer === 'sprite'"
       id="spriteCanvas"
     />
 
     <img
-      v-for="path in modelStore.pressedKeys"
+      v-for="path in modelRuntimeStore.pressedKeys"
       :key="path"
       class="object-cover"
       :src="convertFileSrc(path)"
     >
 
     <div
-      v-show="resizing || !modelStore.modelReady"
+      v-show="resizing || !modelRuntimeStore.modelReady"
       class="flex items-center justify-center bg-black"
     >
       <span class="text-center text-[10vw] text-[#fff]">

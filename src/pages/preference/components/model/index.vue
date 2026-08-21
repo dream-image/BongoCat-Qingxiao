@@ -10,7 +10,9 @@ import { useI18n } from 'vue-i18n'
 import type { Model } from '@/stores/model'
 
 import { useCatStore } from '@/stores/cat'
-import { useModelStore } from '@/stores/model'
+import { useModelRegistryStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import { join } from '@/utils/path'
 
 import BehaviorModal from './components/behavior-modal/index.vue'
@@ -18,20 +20,22 @@ import FloatMenu from './components/float-menu/index.vue'
 import Upload from './components/upload/index.vue'
 
 const catStore = useCatStore()
-const modelStore = useModelStore()
+const modelRegistryStore = useModelRegistryStore()
+const modelRuntimeStore = useModelRuntimeStore()
+const modelSelectionStore = useModelSelectionStore()
 const firstCardRef = useTemplateRef('firstCard')
 const { height } = useElementSize(firstCardRef)
 const { t } = useI18n()
 const openBehaviorModal = ref(false)
 const failedCoverIds = ref(new Set<string>())
 const behaviorEnabled = computed(() => {
-  return modelStore.currentModel?.renderer === 'sprite'
+  return modelSelectionStore.currentModel?.renderer === 'sprite'
     ? catStore.pet.enabled
     : catStore.model.behavior
 })
 
 const masonryItems = computed(() => {
-  const items = modelStore.models.map((item) => {
+  const items = modelRegistryStore.models.map((item) => {
     return {
       key: item.id,
       data: item,
@@ -42,11 +46,11 @@ const masonryItems = computed(() => {
 })
 
 function handleToggle(nextModel: Model) {
-  if (modelStore.currentModel?.id === nextModel.id) return
+  if (modelSelectionStore.currentModel?.id === nextModel.id) return
 
-  modelStore.modelReady = false
+  modelRuntimeStore.modelReady = false
 
-  modelStore.currentModel = nextModel
+  modelSelectionStore.currentModel = nextModel
 }
 
 async function handleDelete(item: Model) {
@@ -59,10 +63,10 @@ async function handleDelete(item: Model) {
   } catch (error) {
     message.error(String(error))
   } finally {
-    modelStore.models = modelStore.models.filter(item => item.id !== id)
+    modelRegistryStore.models = modelRegistryStore.models.filter(item => item.id !== id)
 
-    if (id === modelStore.currentModel?.id) {
-      modelStore.currentModel = modelStore.models[0]
+    if (id === modelSelectionStore.currentModel?.id) {
+      modelSelectionStore.currentModel = modelRegistryStore.models[0]
     }
   }
 }
@@ -113,11 +117,11 @@ function handleCoverError(id: string) {
         <template #actions>
           <i
             class="i-lucide:circle-check"
-            :class="{ 'text-success': data.id === modelStore.currentModel?.id }"
+            :class="{ 'text-success': data.id === modelSelectionStore.currentModel?.id }"
           />
 
           <i
-            v-if="behaviorEnabled && modelStore.currentModel?.id === data.id"
+            v-if="behaviorEnabled && modelSelectionStore.currentModel?.id === data.id"
             class="i-lucide:smile"
             @click.stop="openBehaviorModal = true"
           />

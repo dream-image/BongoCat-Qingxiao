@@ -1,7 +1,8 @@
 import type { PetInteractionEvent, PetPoint } from '@/utils/pet-behavior'
 
 import { useCatStore } from '@/stores/cat'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
 import modelRuntime from '@/utils/model-runtime'
 import { PET_MAX_TAP_DISTANCE } from '@/utils/pet-behavior'
 
@@ -39,7 +40,8 @@ export function usePetPointer(
   startDragging: () => void | Promise<void>,
 ) {
   const catStore = useCatStore()
-  const modelStore = useModelStore()
+  const modelRuntimeStore = useModelRuntimeStore()
+  const modelSelectionStore = useModelSelectionStore()
   let gesture: PointerGesture | undefined
   let hoverSignature = ''
   let hoverTimer: ReturnType<typeof setTimeout> | undefined
@@ -47,8 +49,8 @@ export function usePetPointer(
   // 指针交互只能建立在“用户实际看得见且窗口真正接收事件”的精灵上，否则命中区会和画面错位，
   // 也可能在穿透/悬停隐藏期间截走本应交给桌面的点击。
   function canInteract() {
-    return modelStore.currentModel?.renderer === 'sprite'
-      && modelStore.modelReady
+    return modelSelectionStore.currentModel?.renderer === 'sprite'
+      && modelRuntimeStore.modelReady
       && catStore.pet.enabled
       && catStore.pet.mouseInteractions
       && catStore.window.visible

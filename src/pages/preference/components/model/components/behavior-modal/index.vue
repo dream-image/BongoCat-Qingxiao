@@ -17,33 +17,37 @@ import type { PetActionCatalogView } from '@/utils/pet-behavior'
 
 import { useTauriListen } from '@/composables/useTauriListen'
 import { LISTEN_KEY, WINDOW_LABEL } from '@/constants'
-import { useModelStore } from '@/stores/model'
+import { useModelRuntimeStore } from '@/stores/model-runtime'
+import { useModelSelectionStore } from '@/stores/model-selection'
+import { useModelShortcutStore } from '@/stores/model-shortcut'
 import { getPetActionShortcutId } from '@/utils/pet-action-events'
 
 import BehaviorItem from './components/behavior-item/index.vue'
 
 const modelValue = defineModel<boolean>()
-const modelStore = useModelStore()
+const modelRuntimeStore = useModelRuntimeStore()
+const modelSelectionStore = useModelSelectionStore()
+const modelShortcutStore = useModelShortcutStore()
 const { locale } = useI18n()
 const value = ref<'active' | 'expression' | 'motion' | 'passive'>('motion')
 const petCatalog = ref<PetActionCatalogView | null>(null)
 const petCatalogLoading = ref(false)
-const isSpriteModel = computed(() => modelStore.currentModel?.renderer === 'sprite')
+const isSpriteModel = computed(() => modelSelectionStore.currentModel?.renderer === 'sprite')
 const petActiveGroups = computed(() => petCatalog.value?.activeGroups ?? [])
 const petPassiveGroups = computed(() => petCatalog.value?.passiveGroups ?? [])
 let requestSequence = 0
 let currentCatalogRequestId = ''
 
 function getMotionShortcutId(groupName: string, index: number) {
-  return `${modelStore.currentModel?.id}:motion:${groupName}:${index}`
+  return `${modelSelectionStore.currentModel?.id}:motion:${groupName}:${index}`
 }
 
 function getExpressionShortcutId(index: number) {
-  return `${modelStore.currentModel?.id}:expression:${index}`
+  return `${modelSelectionStore.currentModel?.id}:expression:${index}`
 }
 
 function getActionShortcutId(itemId: string) {
-  return getPetActionShortcutId(modelStore.currentModel?.id ?? '', itemId)
+  return getPetActionShortcutId(modelSelectionStore.currentModel?.id ?? '', itemId)
 }
 
 function startMotion(motion: MotionInfo) {
@@ -58,7 +62,7 @@ const catalogListenerReady = useTauriListen<PetActionCatalogResponse>(
   LISTEN_KEY.PET_ACTION_CATALOG,
   ({ payload }) => {
     if (payload.requestId !== currentCatalogRequestId) return
-    if (payload.modelId !== modelStore.currentModel?.id) return
+    if (payload.modelId !== modelSelectionStore.currentModel?.id) return
 
     petCatalog.value = payload.catalog
     petCatalogLoading.value = false
@@ -66,16 +70,16 @@ const catalogListenerReady = useTauriListen<PetActionCatalogResponse>(
 )
 
 useTauriListen<PetActionTriggerResponse>(LISTEN_KEY.PET_ACTION_TRIGGERED, ({ payload }) => {
-  if (payload.modelId !== modelStore.currentModel?.id) return
+  if (payload.modelId !== modelSelectionStore.currentModel?.id) return
 
   void requestPetActionCatalog()
 })
 
 async function requestPetActionCatalog() {
-  const currentModel = modelStore.currentModel
+  const currentModel = modelSelectionStore.currentModel
 
   if (currentModel?.renderer !== 'sprite'
-    || !modelStore.modelReady) {
+    || !modelRuntimeStore.modelReady) {
     currentCatalogRequestId = ''
     petCatalog.value = null
     petCatalogLoading.value = false
@@ -107,9 +111,9 @@ async function requestPetActionCatalog() {
 }
 
 async function triggerPetAction(itemId: string) {
-  const currentModel = modelStore.currentModel
+  const currentModel = modelSelectionStore.currentModel
 
-  if (currentModel?.renderer !== 'sprite' || !modelStore.modelReady) return
+  if (currentModel?.renderer !== 'sprite' || !modelRuntimeStore.modelReady) return
 
   const requestId = `${currentModel.id}:trigger:${++requestSequence}`
 
@@ -125,8 +129,8 @@ watch(isSpriteModel, (sprite) => {
 }, { immediate: true })
 
 watch([
-  () => modelStore.currentModel?.id,
-  () => modelStore.modelReady,
+  () => modelSelectionStore.currentModel?.id,
+  () => modelRuntimeStore.modelReady,
   locale,
 ], () => {
   void requestPetActionCatalog()
@@ -192,7 +196,7 @@ watch([
             <BehaviorItem
               v-for="action in group.actions"
               :key="action.id"
-              v-model="modelStore.shortcuts[getActionShortcutId(action.id)]"
+              v-model="modelShortcutStore.shortcuts[getActionShortcutId(action.id)]"
               :label="action.label"
               @click="triggerPetAction(action.id)"
             />
@@ -221,7 +225,7 @@ watch([
             <BehaviorItem
               v-for="action in group.actions"
               :key="action.id"
-              v-model="modelStore.shortcuts[getActionShortcutId(action.id)]"
+              v-model="modelShortcutStore.shortcuts[getActionShortcutId(action.id)]"
               :label="action.label"
               @click="triggerPetAction(action.id)"
             />
@@ -236,13 +240,13 @@ watch([
         class="flex flex-col gap-4"
       >
         <Empty
-          v-if="isEmpty(modelStore.currentMotions)"
+          v-if="isEmpty(modelRuntimeStore.currentMotions)"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
         />
 
         <template v-else>
           <div
-            v-for="([groupName, motions], groupIndex) in modelStore.currentMotions"
+            v-for="([groupName, motions], groupIndex) in modelRuntimeStore.currentMotions"
             :key="groupName"
           >
             <div class="mb-2">
@@ -255,7 +259,7 @@ watch([
                 :key="item.no"
               >
                 <BehaviorItem
-                  v-model="modelStore.shortcuts[getMotionShortcutId(groupName, index)]"
+                  v-model="modelShortcutStore.shortcuts[getMotionShortcutId(groupName, index)]"
                   :label="$t('pages.preference.model.behaviorModal.labels.motionIndex', { index: index + 1 })"
                   @click="startMotion(item)"
                 />
@@ -270,17 +274,17 @@ watch([
         class="flex flex-col"
       >
         <Empty
-          v-if="isEmpty(modelStore.currentExpressions)"
+          v-if="isEmpty(modelRuntimeStore.currentExpressions)"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
         />
 
         <div class="b-1 b-solid b-border rounded-lg">
           <template
-            v-for="(item, index) in modelStore.currentExpressions"
+            v-for="(item, index) in modelRuntimeStore.currentExpressions"
             :key="item.name"
           >
             <BehaviorItem
-              v-model="modelStore.shortcuts[getExpressionShortcutId(index)]"
+              v-model="modelShortcutStore.shortcuts[getExpressionShortcutId(index)]"
               :label="$t('pages.preference.model.behaviorModal.labels.expressionIndex', { index: index + 1 })"
               @click="setExpression(index)"
             />

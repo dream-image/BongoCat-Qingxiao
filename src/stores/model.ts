@@ -1,9 +1,7 @@
-import type { ExpressionInfo, MotionInfo } from 'easy-live2d'
-
 import { resolveResource } from '@tauri-apps/api/path'
 import { readDir } from '@tauri-apps/plugin-fs'
 import { defineStore } from 'pinia'
-import { reactive, ref } from 'vue'
+import { nextTick, ref } from 'vue'
 
 import type {
   ValidatedModelMode,
@@ -25,32 +23,42 @@ export interface Model {
   isPreset: boolean
 }
 
-export const useModelStore = defineStore('model', () => {
-  const modelReady = ref(true)
+export interface ModelRegistryInitContext {
+  legacyCurrentModel?: Model
+  legacyShortcuts: Record<string, string>
+  previousModels: Model[]
+}
+
+let legacyCurrentModel: Model | undefined
+let legacyShortcuts: Record<string, string> = {}
+
+function normalizeModel(model: Model): Model {
+  return {
+    ...model,
+    renderer: model.renderer ?? 'live2d',
+  }
+}
+
+function captureLegacyState(state: Record<string, unknown>) {
+  // 旧版把四个状态域存进 model；迁移只读取一次，之后 model 仅拥有模型注册表。
+  if (state.currentModel && typeof state.currentModel === 'object') {
+    legacyCurrentModel = normalizeModel(state.currentModel as Model)
+  }
+
+  if (state.shortcuts && typeof state.shortcuts === 'object') {
+    legacyShortcuts = { ...state.shortcuts as Record<string, string> }
+  }
+
+  return state
+}
+
+export const useModelRegistryStore = defineStore('model', () => {
   const models = ref<Model[]>([])
-  const currentModel = ref<Model>()
-  const supportKeys = reactive<Record<string, string>>({})
-  const pressedKeys = reactive<Record<string, string>>({})
-  const currentMotions = ref<Array<[string, MotionInfo[]]>>([])
-  const currentExpressions = ref<ExpressionInfo[]>([])
-  const shortcuts = reactive<Record<string, string>>({})
 
-  const init = async () => {
+  const init = async (): Promise<ModelRegistryInitContext> => {
     const modelsPath = await resolveResource('assets/models')
-    const previousModels = models.value.map(model => ({
-      ...model,
-      renderer: model.renderer ?? ('live2d' as const),
-    }))
-    const previousCurrent = currentModel.value
-      ? {
-          ...currentModel.value,
-          renderer: currentModel.value.renderer ?? ('live2d' as const),
-        }
-      : void 0
-
+    const previousModels = models.value.map(normalizeModel)
     const previousCustomModels = previousModels.filter(model => !model.isPreset)
-    const previousPresetModels = previousModels.filter(model => model.isPreset)
-
     const spriteModels: Model[] = []
     const spriteIds = new Set<string>()
     const entries = await readDir(modelsPath).catch(() => [])
@@ -128,64 +136,51 @@ export const useModelStore = defineStore('model', () => {
       }
     }
 
-    const nextModels = [...spriteModels, ...live2dModels, ...customModels]
+    models.value = [...spriteModels, ...live2dModels, ...customModels]
 
-    for (const previous of previousPresetModels) {
-      if (previous.renderer !== 'live2d') continue
+    return {
+      legacyCurrentModel,
+      legacyShortcuts: { ...legacyShortcuts },
+      previousModels,
+    }
+  }
 
-      const next = live2dModels.find(model => model.mode === previous.mode)
+  const registerCustomModel = async (model: Model) => {
+    const previousModels = models.value.map(item => ({ ...item }))
 
-      if (!next || previous.id === next.id) continue
-
-      const prefix = `${previous.id}:`
-
-      for (const [key, shortcut] of Object.entries(shortcuts)) {
-        if (!key.startsWith(prefix)) continue
-
-        const nextKey = `${next.id}:${key.slice(prefix.length)}`
-
-        if (!shortcuts[nextKey]) shortcuts[nextKey] = shortcut
-
-        delete shortcuts[key]
-      }
+    if (models.value.some(item => item.id === model.id)) {
+      throw new Error(`Model id already exists: ${model.id}`)
     }
 
-    let matched: Model | undefined
+    models.value = [...models.value, model]
 
-    if (previousCurrent?.isPreset) {
-      if (previousCurrent.renderer === 'sprite') {
-        matched = spriteModels.find(model => model.path === previousCurrent.path)
+    try {
+      // saveNow 的成功返回是导入成功的持久化确认，不能让普通自动保存定时机代替它。
+      await nextTick()
+      await useModelRegistryStore().$tauri.saveNow()
+    } catch (error) {
+      models.value = previousModels
 
-        if (!matched) {
-          const legacyId = previousCurrent.id.replace(/^preset-(?:sprite-)?/, '')
+      // 同步层可能已收到失败注册的快照，回滚也必须立即推回并尝试持久化。
+      await nextTick()
+      await useModelRegistryStore().$tauri.saveNow().catch(() => {})
 
-          matched = spriteModels.find(model => model.id === `preset-sprite-${legacyId}`)
-        }
-      } else {
-        matched = live2dModels.find(model => model.mode === previousCurrent.mode)
-      }
-    } else if (previousCurrent) {
-      matched = customModels.find(model => model.id === previousCurrent.id)
+      throw error
     }
-
-    currentModel.value = matched ?? nextModels[0]
-
-    models.value = nextModels
   }
 
   return {
-    modelReady,
     models,
-    currentModel,
-    supportKeys,
-    pressedKeys,
-    currentMotions,
-    currentExpressions,
-    shortcuts,
     init,
+    registerCustomModel,
   }
 }, {
   tauri: {
-    filterKeys: ['supportKeys', 'pressedKeys'],
+    // 注册表拥有唯一持久化文件；旧 store 的选择、快捷键和运行态不会再被回写。
+    filterKeys: ['models'],
+    filterKeysStrategy: 'pick',
+    hooks: {
+      beforeFrontendSync: captureLegacyState,
+    },
   },
 })
