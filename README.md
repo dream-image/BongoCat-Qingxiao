@@ -8,18 +8,18 @@
   <p>在 BongoCat 原有键鼠、手柄响应和模型导入能力之上，增加清宵雪碧图模型、模块化宠物动作、主动/被动触发器、右键交互菜单与对白气泡。</p>
 
   <p>
-    <a href="https://github.com/dream-image/BongoCat/releases/latest"><img alt="下载最新版 / Download Latest" src="https://img.shields.io/badge/下载最新版-Download_Latest-2f81f7?style=for-the-badge&logo=github" /></a>
+    <a href="https://github.com/dream-image/BongoCat-Qingxiao/releases/latest"><img alt="下载最新版 / Download Latest" src="https://img.shields.io/badge/下载最新版-Download_Latest-2f81f7?style=for-the-badge&logo=github" /></a>
   </p>
 
   <p>
-    <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/dream-image/BongoCat?style=flat-square" /></a>
+    <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/dream-image/BongoCat-Qingxiao?style=flat-square" /></a>
     <a href="https://github.com/ayangweb/BongoCat"><img alt="Upstream ayangweb/BongoCat" src="https://img.shields.io/badge/upstream-ayangweb%2FBongoCat-181717?style=flat-square&logo=github" /></a>
     <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" />
   </p>
 </div>
 
 > [!IMPORTANT]
-> 本仓库是开源项目 [ayangweb/BongoCat](https://github.com/ayangweb/BongoCat) 的修改版（fork），不是原项目的官方发行版。感谢原作者及所有上游贡献者提供的跨平台基础实现。
+> 本仓库是基于开源项目 [ayangweb/BongoCat](https://github.com/ayangweb/BongoCat) 独立维护的修改版，不是原项目的官方发行版。感谢原作者及所有上游贡献者提供的跨平台基础实现。
 
 ## 清宵预览
 
@@ -55,8 +55,8 @@
 请先安装 [Rust](https://www.rust-lang.org/tools/install)、[Node.js](https://nodejs.org/) 和 [pnpm](https://pnpm.io/)，并完成 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)配置。
 
 ```shell
-git clone https://github.com/dream-image/BongoCat.git
-cd BongoCat
+git clone https://github.com/dream-image/BongoCat-Qingxiao.git
+cd BongoCat-Qingxiao
 pnpm install
 pnpm tauri dev
 ```
@@ -107,7 +107,7 @@ src-tauri/assets/models/qingxiao/
 
 ## 下载说明
 
-本仓库的安装包发布在 [dream-image/BongoCat Releases](https://github.com/dream-image/BongoCat/releases)。Windows x64 使用 `.exe` 安装包；当前 macOS 包由 Apple Silicon 设备构建，仅适用于 arm64 Mac。
+本仓库的安装包发布在 [BongoCat-Qingxiao Releases](https://github.com/dream-image/BongoCat-Qingxiao/releases)。Windows x64 使用 `.exe` 安装包；当前 macOS 包由 Apple Silicon 设备构建，仅适用于 arm64 Mac。
 
 ### 打开未签名的 macOS 版本
 
@@ -118,7 +118,7 @@ src-tauri/assets/models/qingxiao/
 3. 在再次出现的确认窗口中选择“打开”。如果仍被阻止，前往“系统设置 → 隐私与安全性”，找到 BongoCat 的拦截提示并选择“仍要打开”。
 
 > [!IMPORTANT]
-> 如果系统仍提示“文件损坏，无法打开”，请确认应用来自[本仓库 Release](https://github.com/dream-image/BongoCat/releases/latest)，然后打开“终端”执行：
+> 如果系统仍提示“文件损坏，无法打开”，请确认应用来自[本仓库 Release](https://github.com/dream-image/BongoCat-Qingxiao/releases/latest)，然后打开“终端”执行：
 >
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/BongoCat.app
