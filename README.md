@@ -4,7 +4,12 @@
   <h1>BongoCat · 清宵桌宠扩展版</h1>
 
   <p>一款支持 macOS、Windows 和 Linux（X11）的开源跨平台互动桌宠。</p>
+  <p><strong>Qingxiao Desktop Pet</strong> — a cross-platform virtual pet built with Tauri, Rust and Vue.</p>
   <p>在 BongoCat 原有键鼠、手柄响应和模型导入能力之上，增加清宵雪碧图模型、模块化宠物动作、主动/被动触发器、右键交互菜单与对白气泡。</p>
+
+  <p>
+    <a href="https://github.com/dream-image/BongoCat/releases/latest"><img alt="下载最新版 / Download Latest" src="https://img.shields.io/badge/下载最新版-Download_Latest-2f81f7?style=for-the-badge&logo=github" /></a>
+  </p>
 
   <p>
     <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/github/license/dream-image/BongoCat?style=flat-square" /></a>
@@ -106,13 +111,22 @@ src-tauri/assets/models/qingxiao/
 
 ### 打开未签名的 macOS 版本
 
-当前 macOS 安装包没有 Apple Developer ID 签名和公证，首次打开时 Gatekeeper 可能提示“无法验证开发者”。请只从本仓库 Release 下载，并按以下方式打开：
+当前 macOS 安装包没有 Apple Developer ID 签名和公证，首次打开时 Gatekeeper 可能提示“无法验证开发者”或“BongoCat 已损坏，无法打开”。请只从本仓库 Release 下载，并按以下方式打开：
 
 1. 打开 `.dmg`，将 `BongoCat.app` 拖入“应用程序”。
 2. 在 Finder 的“应用程序”中右键或按住 `Control` 点击 `BongoCat`，选择“打开”。
 3. 在再次出现的确认窗口中选择“打开”。如果仍被阻止，前往“系统设置 → 隐私与安全性”，找到 BongoCat 的拦截提示并选择“仍要打开”。
 
-不需要全局关闭 Gatekeeper，也不要执行来源不明的解除隔离命令。应用启动后，键盘监听等功能仍需按照 macOS 提示授予对应的系统权限。
+> [!IMPORTANT]
+> 如果系统仍提示“文件损坏，无法打开”，请确认应用来自[本仓库 Release](https://github.com/dream-image/BongoCat/releases/latest)，然后打开“终端”执行：
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/BongoCat.app
+> ```
+>
+> 执行完成后重新打开 BongoCat。请勿对来源不明的应用执行此命令，也不要全局关闭 Gatekeeper。
+
+应用启动后，键盘监听等功能仍需按照 macOS 提示授予对应的系统权限。
 
 如果只需要上游稳定版本，请前往 [ayangweb/BongoCat Releases](https://github.com/ayangweb/BongoCat/releases)；上游安装包不包含本仓库新增的清宵动作模组。
 
