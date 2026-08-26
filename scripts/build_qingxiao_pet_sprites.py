@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""以单一 canonical 生成清宵宠物动作；人物静态区逐像素锁定。"""
+
 import argparse
 import hashlib
 import json
@@ -85,6 +87,55 @@ def clean_transparent_rgb(image: np.ndarray) -> np.ndarray:
     output = image.copy()
     output[output[:, :, 3] == 0, :3] = 0
     return output
+
+
+def blend_rgba(left: np.ndarray, right: np.ndarray, progress: float) -> np.ndarray:
+    progress = max(0.0, min(1.0, progress))
+    blended = np.rint(
+        left.astype(np.float32) * (1 - progress)
+        + right.astype(np.float32) * progress
+    ).astype(np.uint8)
+    return clean_transparent_rgb(blended)
+
+
+def heart_demon_tint(frame: np.ndarray) -> np.ndarray:
+    """按原型把清宵分区映射成低饱和心魔色，避免整个人被统一染成洋红。"""
+    output = frame.copy()
+    rgb = frame[:, :, :3].astype(np.float32)
+    red, green, blue = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    visible = frame[:, :, 3] > 0
+    chroma = np.maximum.reduce((red, green, blue)) - np.minimum.reduce((red, green, blue))
+
+    # 原型的白衣、肤色和金色纹样仍保留原色，只有具有足够色差的蓝青材质进入换色门。
+    blue_family = (
+        visible
+        & (blue >= 70)
+        & (blue - red >= 18)
+        & (chroma >= 25)
+    )
+
+    # 高青度的角饰、耳坠和能量纹理在原型中会明显发紫；头发、衣物阴影和古琴只变成灰蓝紫。
+    cyan_accent = (
+        blue_family
+        & (green - red >= 35)
+        & (blue - green <= 65)
+        & (green >= 100)
+    )
+    blue_material = blue_family & ~cyan_accent
+
+    material = rgb.copy()
+    material[:, :, 0] = np.clip(red * 0.45 + green * 0.28 + blue * 0.15 + 5, 0, 255)
+    material[:, :, 1] = np.clip(red * 0.12 + green * 0.48 + blue * 0.14 + 3, 0, 255)
+    material[:, :, 2] = np.clip(red * 0.06 + green * 0.16 + blue * 0.72 + 2, 0, 255)
+
+    accent = rgb.copy()
+    accent[:, :, 0] = np.clip(red * 0.25 + green * 0.20 + blue * 0.38 + 5, 0, 255)
+    accent[:, :, 1] = np.clip(red * 0.08 + green * 0.32 + blue * 0.16 + 5, 0, 255)
+    accent[:, :, 2] = np.clip(red * 0.08 + green * 0.18 + blue * 0.76, 0, 255)
+
+    output[blue_material, :3] = np.rint(material[blue_material]).astype(np.uint8)
+    output[cyan_accent, :3] = np.rint(accent[cyan_accent]).astype(np.uint8)
+    return clean_transparent_rgb(output)
 
 
 def changed_mask(left: np.ndarray, right: np.ndarray) -> np.ndarray:
@@ -257,30 +308,121 @@ def draw_cloud(
     layer.alpha_composite(body)
 
 
-def draw_wisp(layer: Image.Image, strength: float, phase: float = 0) -> None:
+def cubic_curve_coordinates(
+    controls: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]],
+    steps: int = 28,
+) -> list[tuple[float, float]]:
+    """采样逻辑坐标中的三次贝塞尔曲线，供流云雾带生成连续路径。"""
+    p0, p1, p2, p3 = controls
+    points = []
+    for index in range(steps):
+        t = index / (steps - 1)
+        inverse = 1 - t
+        x = (
+            inverse ** 3 * p0[0]
+            + 3 * inverse ** 2 * t * p1[0]
+            + 3 * inverse * t ** 2 * p2[0]
+            + t ** 3 * p3[0]
+        )
+        y = (
+            inverse ** 3 * p0[1]
+            + 3 * inverse ** 2 * t * p1[1]
+            + 3 * inverse * t ** 2 * p2[1]
+            + t ** 3 * p3[1]
+        )
+        points.append((x, y))
+    return points
+
+
+def cubic_curve_points(
+    controls: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]],
+    steps: int = 28,
+) -> list[tuple[int, int]]:
+    """把曲线采样结果转换为高分辨率绘制点，供固定宽度的流云雾带使用。"""
+    return [
+        (round(x * SCALE), round(y * SCALE))
+        for x, y in cubic_curve_coordinates(controls, steps)
+    ]
+
+
+def draw_mist_stream(
+    layer: Image.Image,
+    controls: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]],
+    opacity: float,
+    width: float,
+) -> None:
+    """绘制断开的宽雾带；只保留柔边和淡淡亮缘，避免再次形成清晰光圈。"""
+    if opacity <= 0:
+        return
+    points = cubic_curve_points(controls)
+
+    # 第一层用低透明青色大范围扩散，承担“水汽”而不是“发光线条”的体积感。
+    haze = effect_canvas()
+    ImageDraw.Draw(haze).line(
+        points,
+        fill=(77, 205, 226, round(34 * opacity)),
+        width=max(1, round(width * SCALE)),
+        joint='curve',
+    )
+    layer.alpha_composite(haze.filter(ImageFilter.GaussianBlur(round(11 * SCALE))))
+
+    # 第二层是更窄的乳白雾脊，仍然经过模糊，确保缩小后看不到一条硬轮廓线。
+    crest = effect_canvas()
+    ImageDraw.Draw(crest).line(
+        points,
+        fill=(224, 251, 255, round(44 * opacity)),
+        width=max(1, round(width * 0.28 * SCALE)),
+        joint='curve',
+    )
+    layer.alpha_composite(crest.filter(ImageFilter.GaussianBlur(round(3.6 * SCALE))))
+
+
+def draw_mist_bank(
+    layer: Image.Image,
+    blobs: tuple[tuple[float, float, float, float, float], ...],
+    opacity: float,
+) -> None:
+    """用互相重叠的椭圆铺出不规则云雾，消除单根曲线带来的几何感。"""
+    if opacity <= 0:
+        return
+
+    bank = effect_canvas()
+    draw = ImageDraw.Draw(bank)
+    for cx, cy, radius_x, radius_y, local_opacity in blobs:
+        draw.ellipse(
+            scaled_box((cx - radius_x, cy - radius_y, cx + radius_x, cy + radius_y)),
+            fill=(205, 247, 252, round(42 * opacity * local_opacity)),
+        )
+    layer.alpha_composite(bank.filter(ImageFilter.GaussianBlur(round(13 * SCALE))))
+
+
+def draw_ambient_aura(layer: Image.Image, strength: float) -> None:
+    """在人物下方与两侧铺开薄雾流云；保持每帧一致，避免切动作时公共装饰闪变。"""
     if strength <= 0:
         return
 
-    angle = phase * math.tau
-    cx = 386 + math.sin(angle) * 3
-    cy = 174 - math.sin(angle) * 4
-    size = 14 + (1 - math.cos(angle)) * 1.2
-    draw_cloud(layer, (cx, cy), size, strength * (0.82 + math.sin(angle) * 0.08))
+    # 三段雾带互不首尾相接：底部负责托住人物，两侧只向上舒展到腰部附近，不包围头脸。
+    streams = (
+        (((70, 390), (58, 354), (80, 321), (130, 309)), 0.76, 22),
+        (((99, 414), (183, 440), (331, 448), (418, 414)), 0.92, 26),
+        (((381, 409), (427, 396), (445, 355), (426, 315)), 0.80, 22),
+    )
+    for controls, opacity, width in streams:
+        draw_mist_stream(layer, controls, strength * opacity, width)
 
-    points = []
-    for index in range(28):
-        t = index / 27
-        x = cx - size * 0.55 - t * 24 + math.sin(t * math.pi * 2) * 4
-        y = cy + size * 0.20 + t * 32 - math.sin(t * math.pi) * 5
-        points.append((round(x * SCALE), round(y * SCALE)))
-    glow = effect_canvas()
-    ImageDraw.Draw(glow).line(points, fill=(64, 222, 255, round(90 * strength)), width=round(5 * SCALE))
-    layer.alpha_composite(glow.filter(ImageFilter.GaussianBlur(round(4 * SCALE))))
-    ImageDraw.Draw(layer).line(
-        points,
-        fill=(191, 249, 255, round(205 * strength)),
-        width=round(1.5 * SCALE),
-        joint='curve',
+    # 云团故意大小不一且局部重叠，让雾带边缘自然散开；中央部分会被人物保护遮罩裁掉。
+    draw_mist_bank(
+        layer,
+        (
+            (78, 388, 34, 17, 0.78),
+            (119, 411, 50, 18, 0.92),
+            (181, 428, 62, 19, 0.72),
+            (270, 435, 72, 20, 0.66),
+            (355, 427, 60, 19, 0.76),
+            (411, 403, 42, 18, 0.88),
+            (428, 357, 22, 24, 0.70),
+        ),
+        strength,
     )
 
 
@@ -569,14 +711,59 @@ def draw_blush(frame: np.ndarray, strength: float) -> np.ndarray:
     return clean_transparent_rgb(np.array(output, dtype=np.uint8))
 
 
+def draw_mouth_expression(frame: np.ndarray, kind: str, strength: float) -> np.ndarray:
+    """只在固定嘴部 ROI 内增加口型，不移动脸型、头发或五官锚点。"""
+    if strength <= 0:
+        return frame.copy()
+
+    alpha = max(0, min(255, round(205 * strength)))
+    layer = effect_canvas()
+    draw = ImageDraw.Draw(layer)
+    outline = (95, 48, 66, alpha)
+    inner = (236, 111, 139, round(220 * strength))
+
+    # 这些坐标按 512px canonical 的嘴部中心标定。所有图元都小于后面的 mouth ROI，
+    # 因而口型可以活泼变化，但不会让下巴、脸宽或发丝跟着 donor 漂移。
+    if kind == 'smile':
+        draw.ellipse(scaled_box((251, 263, 265, 274)), fill=outline)
+        draw.ellipse(scaled_box((254, 269, 262, 272.5)), fill=inner)
+    elif kind == 'surprised':
+        draw.ellipse(scaled_box((253, 263, 263, 274)), fill=outline)
+        draw.ellipse(scaled_box((256, 267, 260, 271)), fill=inner)
+    elif kind == 'pout':
+        width = max(1, round(1.5 * SCALE))
+        draw.arc(
+            scaled_box((247, 264, 267, 278)),
+            205,
+            335,
+            fill=outline,
+            width=width,
+        )
+    elif kind == 'soft':
+        width = max(1, round(1.35 * SCALE))
+        draw.arc(
+            scaled_box((248, 257, 267, 272)),
+            20,
+            160,
+            fill=outline,
+            width=width,
+        )
+    else:
+        raise ValueError(f'unknown mouth expression: {kind}')
+
+    small = layer.resize((FRAME_SIZE, FRAME_SIZE), Image.Resampling.LANCZOS)
+    output = Image.alpha_composite(Image.fromarray(frame, 'RGBA'), small)
+    return clean_transparent_rgb(np.array(output, dtype=np.uint8))
+
+
 def effect_layer(
     kind: str,
     progress: float,
-    phase: float = 0,
     anchor: tuple[float, float] | None = None,
 ) -> np.ndarray:
     layer = effect_canvas()
-    draw_wisp(layer, 1 if kind != 'enter' else progress, phase)
+    # 入场从工作态逐渐长出仙气；进入宠物态后所有动作共享完全相同的四周仙气底层。
+    draw_ambient_aura(layer, progress if kind == 'enter' else 1)
 
     if kind == 'doze':
         for index, (x, y, size) in enumerate(((358, 151, 9), (383, 126, 11), (405, 96, 13))):
@@ -622,9 +809,10 @@ def effect_layer(
         )
     elif kind == 'hmph':
         draw_hmph_puff(layer, progress)
-
     small = layer.resize((FRAME_SIZE, FRAME_SIZE), Image.Resampling.LANCZOS)
-    return clean_transparent_rgb(np.array(small, dtype=np.uint8))
+    effect = clean_transparent_rgb(np.array(small, dtype=np.uint8))
+    # 心魔过程中连同四周仙气一起由青色渐变为紫色，不能在第二帧整层瞬间换色。
+    return blend_rgba(effect, heart_demon_tint(effect), progress) if kind == 'heart-demon' else effect
 
 
 def composite_external_effect(
@@ -1154,37 +1342,43 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
     pluck_10 = split_sheet(model_dir / 'sprites/pluck-10.webp', 6, 3)
     # idle 第 0 帧是唯一工作态 canonical；闭眼帧只能作为局部眼态 donor，不能成为宠物常态底图。
     canonical = clean_transparent_rgb(idle[0])
-    closed = clean_transparent_rgb(idle[2])
+    closed_source = clean_transparent_rgb(idle[2])
 
     eye_roi = ellipse_mask([(184, 198, 254, 278), (242, 198, 312, 278)])
-    eye_delta = changed_mask(canonical, closed)
-    if np.any(eye_delta & ~eye_roi):
-        raise ValueError('idle closed-eye donor changes pixels outside the fixed eye ROI')
-    # ROI 负责 fail-closed，实际差异负责保留眼线抗锯齿边缘，两者不能互相替代。
+    eye_delta = changed_mask(canonical, closed_source)
+    # 输入即使来自整帧重画，闭眼 donor 也只能把固定眼部 ROI 交给成品；
+    # 头发、脸型、嘴唇、衣服、古琴与飘带一律继续使用 canonical。
     eye = eye_delta & eye_roi
+    closed = canonical.copy()
+    closed[eye] = closed_source[eye]
+    closed = clean_transparent_rgb(closed)
     # 脸红会覆盖下眼睑以下的同一脸部差异区；眼态门只取不与脸颊特效重叠的眼线/虹膜核心。
     eye_timeline = eye & rect_mask((180, 190, 315, 236))
     left_eye = eye & rect_mask((180, 190, 248, 282))
     wink = canonical.copy()
     wink[left_eye] = closed[left_eye]
 
+    # 用户允许嘴唇和脸部表情变化，但“允许变化”不等于整张脸可重画。
+    # 眼睛、嘴部与脸颊分别使用固定白名单；脸型、鼻梁、下巴和发际线仍逐像素锁定。
+    mouth = ellipse_mask([(232, 245, 282, 289)])
+
     def add_effect(
         frame: np.ndarray,
         kind: str,
         progress: float,
-        phase: float = 0,
         anchor: tuple[float, float] | None = None,
     ) -> np.ndarray:
-        # 每帧都从当前 base/pose 的 alpha 膨胀保护区；移动手超出 canonical 轮廓时仍不会被特效盖住。
+        # 飘带已经烘焙进全部基础人物帧；这里只叠加动作特效，避免切换动画时临时飘带先出现又消失。
+        # 每帧仍从当前 base/pose 的 alpha 膨胀保护区裁剪特效，移动手和常驻飘带都不会被覆盖。
         character = Image.fromarray(frame[:, :, 3], 'L')
         protected = np.asarray(character.filter(ImageFilter.MaxFilter(9)), dtype=np.uint8) > 0
-        return composite_external_effect(frame, effect_layer(kind, progress, phase, anchor), protected)
+        return composite_external_effect(frame, effect_layer(kind, progress, anchor), protected)
 
     # 宠物常态必须与工作态保持同一睁眼基准；闭眼 donor 只用于短眨眼和明确的睡眠语义。
     idle_faces = [canonical] * 10 + [closed, canonical]
     idle_frames = [
-        add_effect(face, 'idle', 1, index / (len(idle_faces) - 1))
-        for index, face in enumerate(idle_faces)
+        add_effect(face, 'idle', 1)
+        for face in idle_faces
     ]
     pet_pose = idle_frames[0].copy()
 
@@ -1218,7 +1412,11 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
     sleep_faces = sleep_faces + list(reversed(sleep_faces))
     doze_frames = effect_action('doze', sleep_faces)
     dream_frames = effect_action('dream', sleep_faces)
-    content_frames = effect_action('content', [canonical] * len(symmetric_progress), blush=True)
+    content_faces = [
+        draw_mouth_expression(canonical, 'smile', progress)
+        for progress in symmetric_progress
+    ]
+    content_frames = effect_action('content', content_faces, blush=True)
 
     # 动作白名单独立于 donor 像素差异，未来素材若带全身噪点也不会被自动纳入最终帧或验收区。
     chime_left = polygon_mask(
@@ -1230,14 +1428,15 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         4,
     )
     chime_corridor = chime_left | chime_right
-    # 轻奏只沿 pluck-08 同一袖型从 canonical→中间位→外拨位单向展开；
-    # 合理 hold 用来承接特效节奏，不能为凑唯一姿势混入会让端点跳 48px 的其他 donor。
-    chime_half = [canonical, pluck_08[1], pluck_08[1], pluck_08[2], pluck_08[2], pluck_08[2]]
+    # canonical→中间手位已形成清晰轻奏，后续由音符和口型继续推进；固定同一手位
+    # 能避免为了“多一帧姿势”切换整块袖型，正是用户指出的逐帧差异过大问题。
+    chime_half = [canonical, pluck_08[1], pluck_08[1], pluck_08[1], pluck_08[1], pluck_08[1]]
     chime_donors = chime_half + list(reversed(chime_half))
     chime_frames = []
     chime_characters = []
     for donor, progress in zip(chime_donors, symmetric_progress):
-        base = transfer_pose(canonical, canonical, donor, chime_corridor)
+        face = draw_mouth_expression(canonical, 'soft', progress)
+        base = transfer_pose(face, canonical, donor, chime_corridor)
         chime_characters.append(base)
         chime_frames.append(add_effect(base, 'chime', progress))
     chime_characters[0] = canonical.copy()
@@ -1254,14 +1453,15 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         4,
     )
     curious_corridor = curious_left | curious_right
-    # 好奇动作只沿 pluck-10 同一袖型逐级伸手；首个中间位距 canonical 约 13px，
-    # 不再以 changed-mask 缺失端点为由放过原先约 51.5px 的切入突跳。
-    curious_half = [canonical, pluck_10[1], pluck_10[1], pluck_10[2], pluck_10[2], pluck_10[2]]
+    # 好奇动作只取 pluck-10 的第一个中间位；后续由星光和微张嘴推进，
+    # 不再切换整块袖型制造原先约 51.5px 的突跳。
+    curious_half = [canonical, pluck_10[1], pluck_10[1], pluck_10[1], pluck_10[1], pluck_10[1]]
     curious_donors = curious_half + list(reversed(curious_half))
     curious_frames = []
     curious_characters = []
     for donor, progress in zip(curious_donors, symmetric_progress):
-        base = transfer_pose(canonical, canonical, donor, curious_corridor)
+        face = draw_mouth_expression(canonical, 'soft', progress)
+        base = transfer_pose(face, canonical, donor, curious_corridor)
         curious_characters.append(base)
         curious_frames.append(add_effect(base, 'curious', progress))
     curious_characters[0] = canonical.copy()
@@ -1293,7 +1493,7 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
     action_progress = symmetric_progress
     # 受惊动作由特效表达强度，手部只走 pluck-08 的单向外拨轨迹；
     # 同一 source family 的 hold 比跨袖型补“丰富姿势”更稳定。
-    staged_04_half = [canonical, pluck_08[1], pluck_08[1], pluck_08[2], pluck_08[2], pluck_08[2]]
+    staged_04_half = [canonical, pluck_08[1], pluck_08[1], pluck_08[1], pluck_08[1], pluck_08[1]]
     staged_04 = staged_04_half + list(reversed(staged_04_half))
     staged_10 = [
         canonical,
@@ -1314,12 +1514,15 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         kind: str,
         donors: list[np.ndarray],
         corridor: np.ndarray,
-        face: np.ndarray,
+        faces: np.ndarray | list[np.ndarray],
         blush: bool = False,
     ) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        face_frames = [faces] * len(action_progress) if isinstance(faces, np.ndarray) else faces
+        if len(face_frames) != len(action_progress):
+            raise ValueError(f'{kind} face timeline does not match its progress timeline')
         frames = []
         character_frames = []
-        for donor, progress in zip(donors, action_progress):
+        for donor, face, progress in zip(donors, face_frames, action_progress):
             base = draw_blush(face, progress) if blush else face
             character_frame = transfer_pose(base, canonical, donor, corridor)
             character_frames.append(character_frame)
@@ -1382,8 +1585,20 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         frames[-1] = pet_pose.copy()
         return frames, character_frames
 
-    startled_frames, startled_characters = pose_action('startled', staged_04, curious_corridor, canonical)
-    remind_frames, remind_characters = pose_action('remind', staged_10, low_corridor, canonical)
+    startled_faces = [
+        draw_mouth_expression(canonical, 'surprised', progress)
+        for progress in action_progress
+    ]
+    remind_faces = [
+        draw_mouth_expression(canonical, 'soft', progress)
+        for progress in action_progress
+    ]
+    startled_frames, startled_characters = pose_action(
+        'startled', staged_04, curious_corridor, startled_faces
+    )
+    remind_frames, remind_characters = pose_action(
+        'remind', staged_10, low_corridor, remind_faces
+    )
 
     right_common = pluck_04[1]
     right_alternate = pluck_07[1]
@@ -1484,13 +1699,20 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         pluck_10[2],
     ]
     wink_anchor_half = [(105, 280)] * 8
+    wink_mouth_faces = [
+        draw_mouth_expression(face, 'smile', progress)
+        for face, progress in zip(
+            [canonical] + [wink] * 14 + [canonical],
+            symmetric_sequence(progress_half_16),
+        )
+    ]
     wink_wave_frames, wink_wave_characters = layered_pose_action(
         'wink-wave',
         symmetric_sequence(wink_left_half),
         symmetric_sequence(wink_left_half),
         raised_left,
         raised_right,
-        wink,
+        wink_mouth_faces,
         symmetric_sequence(progress_half_16),
         symmetric_sequence(wink_anchor_half),
         blush=True,
@@ -1507,7 +1729,11 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         pluck_10[2],
     ]
     hmph_anchor_half = [(120, 280)] * 6
-    hmph_faces = [canonical] * 5 + [closed, closed] + [canonical] * 5
+    hmph_eye_faces = [canonical] * 5 + [closed, closed] + [canonical] * 5
+    hmph_faces = [
+        draw_mouth_expression(face, 'pout', progress)
+        for face, progress in zip(hmph_eye_faces, symmetric_sequence(progress_half_12))
+    ]
     hmph_frames, hmph_characters = layered_pose_action(
         'hmph',
         symmetric_sequence(hmph_left_half),
@@ -1520,7 +1746,26 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         blush=True,
     )
 
-    # 两端较快、峰值较慢，让 12/16 帧动作有可读的蓄力与停顿；idle 的闭眼只保留 80ms 短眨眼。
+    # 战斗化形保留原 transform 动画；心魔用 16 帧对称包络渐变成参考图里的低饱和灰蓝紫。
+    # 多出的帧只细化进入/退出过程，总时长仍为 2.32 秒，避免用更长播放时间伪装流畅度。
+    heart_demon_progress = [
+        0, 0.055, 0.198, 0.394, 0.606, 0.802, 0.945, 1,
+        1, 0.945, 0.802, 0.606, 0.394, 0.198, 0.055, 0,
+    ]
+    heart_demon_target = heart_demon_tint(canonical)
+    heart_demon_characters = [
+        blend_rgba(canonical, heart_demon_target, progress)
+        for progress in heart_demon_progress
+    ]
+    heart_demon_frames = [
+        add_effect(character, 'heart-demon', progress)
+        for character, progress in zip(heart_demon_characters, heart_demon_progress)
+    ]
+    heart_demon_frames[0] = pet_pose.copy()
+    heart_demon_frames[-1] = pet_pose.copy()
+
+    # 预览时长必须和 model.json / module.json 的应用播放配置完全一致；
+    # 不能用更快的 QA 时间线掩盖实际运行中的停顿或跳帧。
     enter_durations = [100, 120, 140, 160, 190, 190, 160, 140]
     idle_durations = [380] * 10 + [80, 380]
     doze_durations = [100, 120, 150, 180, 220, 300, 300, 220, 180, 150, 120, 100]
@@ -1531,6 +1776,10 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
     glissando_durations = [80, 110, 140, 180, 240, 300, 300, 240, 180, 140, 110, 80]
     wink_durations = [70, 80, 95, 110, 130, 160, 210, 280, 280, 210, 160, 130, 110, 95, 80, 70]
     hmph_durations = [90, 120, 150, 190, 260, 330, 330, 260, 190, 150, 120, 90]
+    heart_demon_durations = [
+        45, 75, 90, 110, 130, 150, 180, 380,
+        380, 180, 150, 130, 110, 90, 75, 45,
+    ]
     open_8 = [canonical] * 8
     open_12 = [canonical] * 12
     open_16 = [canonical] * 16
@@ -1562,25 +1811,25 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         ),
         AnimationSpec(
             'pet-chime', chime_frames, common_durations,
-            allowed_character_mask=eye | chime_corridor, require_two_hands=True,
+            allowed_character_mask=eye | mouth | chime_corridor, require_two_hands=True,
             character_frames=chime_characters, expected_eye_frames=open_12, eye_mask=eye_timeline,
             centroid_left_hand_mask=chime_left, centroid_right_hand_mask=chime_right,
             maximum_hand_centroid_jump=36, maximum_hand_silhouette_xor_ratio=0.035,
         ),
         AnimationSpec(
             'pet-curious', curious_frames, common_durations,
-            allowed_character_mask=eye | curious_corridor, character_frames=curious_characters,
+            allowed_character_mask=eye | mouth | curious_corridor, character_frames=curious_characters,
             expected_eye_frames=open_12, eye_mask=eye_timeline,
             centroid_left_hand_mask=curious_left, centroid_right_hand_mask=curious_right,
             maximum_hand_centroid_jump=36, maximum_hand_silhouette_xor_ratio=0.035,
         ),
         AnimationSpec(
             'pet-content', content_frames, common_durations,
-            allowed_character_mask=eye | cheek, expected_eye_frames=open_12, eye_mask=eye_timeline,
+            allowed_character_mask=eye | mouth | cheek, expected_eye_frames=open_12, eye_mask=eye_timeline,
         ),
         AnimationSpec(
             'pet-startled', startled_frames, lively_durations,
-            allowed_character_mask=eye | curious_corridor, require_two_hands=True,
+            allowed_character_mask=eye | mouth | curious_corridor, require_two_hands=True,
             character_frames=startled_characters, expected_eye_frames=open_12, eye_mask=eye_timeline,
             centroid_left_hand_mask=curious_left, centroid_right_hand_mask=curious_right,
             maximum_hand_centroid_jump=36, maximum_hand_silhouette_xor_ratio=0.035,
@@ -1616,14 +1865,14 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         ),
         AnimationSpec(
             'pet-remind', remind_frames, lively_durations,
-            allowed_character_mask=eye | low_corridor, require_two_hands=True,
+            allowed_character_mask=eye | mouth | low_corridor, require_two_hands=True,
             character_frames=remind_characters, expected_eye_frames=open_12, eye_mask=eye_timeline,
             centroid_left_hand_mask=low_left, centroid_right_hand_mask=raised_right,
             maximum_hand_centroid_jump=36, maximum_hand_silhouette_xor_ratio=0.035,
         ),
         AnimationSpec(
             'pet-wink-wave', wink_wave_frames, wink_durations,
-            allowed_character_mask=eye | cheek | raised_corridor, require_two_hands=True,
+            allowed_character_mask=eye | mouth | cheek | raised_corridor, require_two_hands=True,
             character_frames=wink_wave_characters,
             left_hand_mask=raised_left, right_hand_mask=raised_right,
             right_hand_presence_mask=right_hand_presence,
@@ -1637,7 +1886,7 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         ),
         AnimationSpec(
             'pet-hmph', hmph_frames, hmph_durations,
-            allowed_character_mask=eye | cheek | raised_corridor, require_two_hands=True,
+            allowed_character_mask=eye | mouth | cheek | raised_corridor, require_two_hands=True,
             character_frames=hmph_characters,
             left_hand_mask=raised_left, right_hand_mask=raised_right,
             right_hand_presence_mask=right_hand_presence,
@@ -1649,6 +1898,12 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
             centroid_left_hand_mask=raised_left, centroid_right_hand_mask=raised_right,
             maximum_hand_centroid_jump=36, maximum_hand_silhouette_xor_ratio=0.035,
         ),
+        AnimationSpec(
+            'pet-heart-demon', heart_demon_frames, heart_demon_durations,
+            columns=4,
+            allowed_character_mask=canonical[:, :, 3] > 0,
+            expected_eye_frames=heart_demon_characters, eye_mask=eye_timeline,
+        ),
     ]
     return specs, canonical, pet_pose
 
@@ -1658,6 +1913,11 @@ def main() -> None:
     parser.add_argument('--model-dir', required=True, type=Path)
     parser.add_argument('--output-dir', required=True, type=Path)
     parser.add_argument('--only', action='append', default=[])
+    parser.add_argument(
+        '--legacy-procedural',
+        action='store_true',
+        help='deprecated compatibility flag; canonical-first generation is always used',
+    )
     args = parser.parse_args()
 
     specs, canonical, pet_pose = build_animations(args.model_dir)

@@ -16,6 +16,22 @@
       "priority": 30,
       "cooldownMs": 5000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 30,
+        "set": {
+          "mood": "happy"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 120000
+        }
+      },
+      "audio": {
+        "file": "@model/audio/common-voice-11-hum.wem",
+        "delayMs": 100,
+        "volume": 0.86
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -27,20 +43,29 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "……再摸一下也行。",
-              "en-US": "...One more pat is fine."
+              "zh-CN": "嗯……",
+              "en-US": "Mm..."
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "手还算温柔。",
-              "en-US": "Your touch is gentle enough."
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-content"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-content"
+        }
+      ]
     },
     "chime": {
       "label": {
@@ -75,7 +100,69 @@
             "weight": 3
           }
         ]
-      }
+      },
+      "stateDialogues": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "dialogue": {
+            "delayMs": 100,
+            "durationMs": 2200,
+            "anchor": {
+              "x": 342,
+              "y": 168
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "战前一曲，定心。",
+                  "en-US": "One tune before battle—steady your heart."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "dialogue": {
+            "delayMs": 120,
+            "durationMs": 2200,
+            "anchor": {
+              "x": 342,
+              "y": 168
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "想听？那就别后悔。",
+                  "en-US": "You wanted a tune. Don't regret it."
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-chime"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-chime"
+        }
+      ]
     },
     "ambient-chime": {
       "label": {
@@ -103,7 +190,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-chime"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-chime"
+        }
+      ]
     },
     "doze": {
       "label": {
@@ -114,6 +217,16 @@
       "priority": 12,
       "cooldownMs": 16000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 30,
+        "set": {
+          "activity": "napping"
+        },
+        "lifetime": {
+          "type": "until-input"
+        }
+      },
       "dialogue": {
         "chance": 0.25,
         "delayMs": 160,
@@ -138,7 +251,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-doze"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-doze"
+        }
+      ]
     },
     "dream": {
       "label": {
@@ -149,6 +278,16 @@
       "priority": 14,
       "cooldownMs": 22000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 40,
+        "set": {
+          "activity": "sleeping"
+        },
+        "lifetime": {
+          "type": "until-input"
+        }
+      },
       "dialogue": {
         "chance": 0.35,
         "delayMs": 180,
@@ -173,17 +312,43 @@
             "weight": 1
           }
         ]
-      }
-    },
-    "white-transform": {
-      "label": {
-        "zh-CN": "白色化形",
-        "en-US": "White transformation"
       },
-      "animation": "@model/transform",
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-dream"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-dream"
+        }
+      ]
+    },
+    "attack-transform": {
+      "label": {
+        "zh-CN": "战斗化形",
+        "en-US": "Enter combat form"
+      },
+      "animation": "@model/pet-normal-to-attack",
       "priority": 42,
       "cooldownMs": 12000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 80,
+        "set": {
+          "form": "attack"
+        },
+        "lifetime": {
+          "type": "session"
+        }
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 180,
@@ -195,13 +360,136 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "云气化形，莫要眨眼。",
-              "en-US": "Clouds take form. Don't blink."
+              "zh-CN": "战意凝形，这一式可要看清。",
+              "en-US": "Battle intent takes form. Watch this move closely."
             },
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-flourish"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-to-attack"
+        }
+      ]
+    },
+    "heart-demon-transform": {
+      "label": {
+        "zh-CN": "心魔化形",
+        "en-US": "Heart-demon transformation"
+      },
+      "animation": "@model/pet-normal-to-demon",
+      "priority": 44,
+      "cooldownMs": 12000,
+      "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 90,
+        "set": {
+          "form": "demon"
+        },
+        "lifetime": {
+          "type": "session"
+        }
+      },
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 180,
+        "durationMs": 2400,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "心魔而已，还压不住我。",
+              "en-US": "Only a heart-demon. It cannot overcome me."
+            },
+            "weight": 1
+          }
+        ]
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-to-demon"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-flourish"
+        }
+      ]
+    },
+    "restore-normal-form": {
+      "label": {
+        "zh-CN": "恢复常态",
+        "en-US": "Return to normal form"
+      },
+      "priority": 46,
+      "cooldownMs": 3000,
+      "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 99,
+        "set": {
+          "form": "normal"
+        },
+        "lifetime": {
+          "type": "session"
+        }
+      },
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 0,
+        "durationMs": 800,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "云色收敛，归于本相。",
+              "en-US": "The clouds recede. I return to myself."
+            },
+            "weight": 1
+          }
+        ]
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-to-normal"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-to-normal"
+        }
+      ]
     },
     "curious-after-pause": {
       "label": {
@@ -212,28 +500,45 @@
       "priority": 20,
       "cooldownMs": 240000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-09-help.wem",
+        "delayMs": 100,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 0.5,
         "delayMs": 100,
         "durationMs": 2100,
-        "anchor": { "x": 350, "y": 166 },
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
         "lines": [
           {
             "text": {
-              "zh-CN": "停下了？是在想什么？",
-              "en-US": "You stopped. What are you thinking about?"
+              "zh-CN": "怎么了？需要帮忙吗？",
+              "en-US": "What's wrong? Need any help?"
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "嗯？这回又卡在哪里了。",
-              "en-US": "Hm? What has you stuck this time?"
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-curious"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-curious"
+        }
+      ]
     },
     "doze-after-ten": {
       "label": {
@@ -248,7 +553,10 @@
         "chance": 0.3,
         "delayMs": 160,
         "durationMs": 2100,
-        "anchor": { "x": 348, "y": 166 },
+        "anchor": {
+          "x": 348,
+          "y": 166
+        },
         "lines": [
           {
             "text": {
@@ -265,7 +573,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-doze"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-doze"
+        }
+      ]
     },
     "dream-after-twenty": {
       "label": {
@@ -280,7 +604,10 @@
         "chance": 0.35,
         "delayMs": 180,
         "durationMs": 2200,
-        "anchor": { "x": 350, "y": 166 },
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
         "lines": [
           {
             "text": {
@@ -297,7 +624,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-dream"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-dream"
+        }
+      ]
     },
     "deep-dream-cycle": {
       "label": {
@@ -312,7 +655,10 @@
         "chance": 0.2,
         "delayMs": 180,
         "durationMs": 2100,
-        "anchor": { "x": 350, "y": 166 },
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
         "lines": [
           {
             "text": {
@@ -329,7 +675,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-dream"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-dream"
+        }
+      ]
     },
     "midday-rest-window": {
       "label": {
@@ -344,7 +706,10 @@
         "chance": 0.8,
         "delayMs": 150,
         "durationMs": 2300,
-        "anchor": { "x": 348, "y": 166 },
+        "anchor": {
+          "x": 348,
+          "y": 166
+        },
         "lines": [
           {
             "text": {
@@ -361,7 +726,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-doze"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-doze"
+        }
+      ]
     },
     "evening-chime-window": {
       "label": {
@@ -376,7 +757,10 @@
         "chance": 0.8,
         "delayMs": 110,
         "durationMs": 2300,
-        "anchor": { "x": 342, "y": 168 },
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
         "lines": [
           {
             "text": {
@@ -393,7 +777,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-chime"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-chime"
+        }
+      ]
     }
   },
   "triggers": [
@@ -428,6 +828,21 @@
       "enterPet": true
     },
     {
+      "id": "manual-doze",
+      "type": "manual",
+      "action": "doze",
+      "label": {
+        "zh-CN": "让她小憩",
+        "en-US": "Let her doze"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 30,
+      "enterPet": true
+    },
+    {
       "id": "manual-dream",
       "type": "manual",
       "action": "dream",
@@ -439,28 +854,61 @@
         "zh-CN": "日常作息",
         "en-US": "Routine"
       },
-      "order": 30,
+      "order": 40,
       "enterPet": true
     },
     {
-      "id": "manual-white-transform",
+      "id": "manual-attack-transform",
       "type": "manual",
-      "action": "white-transform",
+      "action": "attack-transform",
       "label": {
-        "zh-CN": "白色化形",
-        "en-US": "White transformation"
+        "zh-CN": "战斗化形",
+        "en-US": "Enter combat form"
       },
       "group": {
         "zh-CN": "日常作息",
         "en-US": "Routine"
       },
-      "order": 40,
+      "order": 50,
+      "enterPet": true
+    },
+    {
+      "id": "manual-heart-demon-transform",
+      "type": "manual",
+      "action": "heart-demon-transform",
+      "label": {
+        "zh-CN": "心魔化形",
+        "en-US": "Heart-demon transformation"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 60,
+      "enterPet": true
+    },
+    {
+      "id": "manual-restore-normal-form",
+      "type": "manual",
+      "action": "restore-normal-form",
+      "label": {
+        "zh-CN": "恢复常态",
+        "en-US": "Return to normal form"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 70,
       "enterPet": true
     },
     {
       "id": "ambient-routine",
       "type": "interval",
-      "delayMs": [180000, 360000],
+      "delayMs": [
+        180000,
+        360000
+      ],
       "choices": [
         {
           "action": "ambient-chime",
@@ -493,7 +941,10 @@
       "id": "idle-deep-dream-cycle",
       "type": "idle",
       "afterMs": 2400000,
-      "repeatMs": [1500000, 2400000],
+      "repeatMs": [
+        1500000,
+        2400000
+      ],
       "action": "deep-dream-cycle",
       "oncePerIdle": false
     },
@@ -503,7 +954,15 @@
       "action": "midday-rest-window",
       "startTime": "12:00",
       "endTime": "13:30",
-      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "weekdays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
       "catchUpMs": 5400000,
       "enterPet": true
     },
@@ -513,7 +972,15 @@
       "action": "evening-chime-window",
       "startTime": "19:30",
       "endTime": "21:30",
-      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "weekdays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
       "catchUpMs": 7200000,
       "enterPet": true
     }

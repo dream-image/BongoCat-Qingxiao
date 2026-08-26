@@ -58,6 +58,45 @@ export async function readFilePrefix(path: string, maxBytes: number) {
   }
 }
 
+export async function readBoundedBinaryFile(
+  path: string,
+  maxBytes: number,
+  label: string,
+) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new RangeError('Binary file read limit must be a positive safe integer')
+  }
+
+  const file = await open(path, { read: true })
+
+  try {
+    const metadata = await file.stat()
+
+    if (!metadata.isFile || metadata.size <= 0 || metadata.size > maxBytes) {
+      throw new RangeError(`${label} must be a non-empty file no larger than ${maxBytes} bytes`)
+    }
+
+    // 按上限多留一个字节，既防止 stat 后文件增长，也避免先把不受信任音频完整读入内存再校验。
+    const bytes = new Uint8Array(maxBytes + 1)
+    let offset = 0
+
+    while (offset < bytes.byteLength) {
+      const count = await file.read(bytes.subarray(offset))
+
+      if (count === null) break
+      if (count <= 0) throw new Error(`${label} read made no progress`)
+
+      offset += count
+    }
+
+    if (offset > maxBytes) throw new RangeError(`${label} exceeds the ${maxBytes} byte limit`)
+
+    return bytes.slice(0, offset)
+  } finally {
+    await file.close()
+  }
+}
+
 export async function readBoundedTextFile(
   path: string,
   maxBytes: number,

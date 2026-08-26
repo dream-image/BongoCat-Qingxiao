@@ -9,6 +9,8 @@
 - `src/utils/pet-behavior-module.ts`：模块、action、dialogue、trigger 的严格白名单与默认值
 - `src/utils/pet-behavior-scheduler.ts`：本地日期、星期、时刻和跨午夜窗口
 - `src/utils/pet-behavior-passive.ts`：会话、回归、活跃度、持续工作与每日窗口状态
+- `src/utils/model-runtime.ts`：行为控制器与 Sprite 渲染器之间的动作、对白和音频桥接
+- `src/utils/sprite-audio.ts`、`src/utils/wwise-opus.ts`：本地音频加载、WEM 解析和播放限制
 - `src/composables/usePetActionMenu.ts`：主动二级菜单和被动三级菜单
 - `src-tauri/assets/models/qingxiao/`：当前可运行样例
 
@@ -95,6 +97,11 @@ Hit area 支持：
       "priority": 30,
       "cooldownMs": 10000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/welcome.wem",
+        "delayMs": 100,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -134,6 +141,124 @@ Action 的 `animation`：
 
 `priority` 范围为 0–99，只在同一来源档位内排序；来源总体优先级由运行时控制。`cooldownMs` 为非负定时器值。`interruptible` 默认 `true`。
 
+## 人物状态机与动作效果
+
+`PetBehaviorController` 的 `work-idle`、`pet-entering`、`pet-action` 等值只表示播放阶段。模型希望表达清醒、困倦、情绪或形态时，在 `behaviors.pet.stateMachine` 声明人物状态：
+
+```json
+{
+  "dimensions": {
+    "activity": {
+      "initial": "awake",
+      "values": ["awake", "relaxed", "drowsy", "sleeping"]
+    },
+    "mood": {
+      "initial": "calm",
+      "values": ["calm", "happy", "annoyed"]
+    }
+  },
+  "profiles": [
+    {
+      "id": "happy",
+      "priority": 100,
+      "scene": "pet",
+      "match": { "mood": "happy" },
+      "animation": "pet-happy"
+    },
+    {
+      "id": "pet-fallback",
+      "priority": 0,
+      "scene": "pet",
+      "match": {},
+      "animation": "pet-idle"
+    }
+  ],
+  "rules": [
+    {
+      "id": "drowsy-after-ten-minutes",
+      "priority": 20,
+      "when": { "scene": "pet", "idleForMs": 600000 },
+      "set": { "activity": "drowsy" }
+    }
+  ]
+}
+```
+
+- 最多 8 个 dimension，每维最多 32 个 value；id 使用小写字母、数字和连字符。
+- Profile 只能引用顶层循环动画，按 `priority`、匹配维度数量和文件顺序稳定选择；必须有 `scene:"pet" + match:{}` 的兜底。
+- Rule 第一版支持 `scene`、`idleForMs` 和本地 `dailyWindow`。状态窗口的 `weekdays` 使用 JavaScript 本地星期 `0–6`（周日到周六），与动作 trigger 使用的 `1–7` 不同。
+- 不配置 `stateMachine` 的旧模型继续使用 `defaultAnimation` 和 `idleAnimation`。
+
+模块 action 可用 `stateEffect` 在真正启动或正常完成后改变人物状态：
+
+```json
+{
+  "when": "finished",
+  "priority": 30,
+  "set": { "mood": "happy" },
+  "lifetime": { "type": "duration", "durationMs": 120000 }
+}
+```
+
+`when` 默认为 `finished`；被打断或销毁的动作不提交完成效果。`lifetime` 支持 `session`、`until-input` 和带正数 `durationMs` 的 `duration`。新 action assignment 会覆盖同一维度的旧 assignment；不要建立需要回滚过期状态的隐式历史栈。无 `stateEffect` 的动作是临时动作，完成后回到“完成当时”最新状态对应的常态，而不是固定回 `pet-idle`。
+
+当形态会改变人物颜色、材质或轮廓时，action 还需用 `stateAnimations` 选择同形态的一次性动画：
+
+```json
+{
+  "animation": "gesture",
+  "stateAnimations": [
+    {
+      "priority": 90,
+      "match": { "form": "attack" },
+      "animation": "attack-gesture"
+    },
+    {
+      "priority": 90,
+      "match": { "form": "demon" },
+      "animation": "demon-gesture"
+    }
+  ]
+}
+```
+
+- 每个 action 最多 16 个变体；`match` 不能为空，且只能引用状态机已有 dimension/value。
+- 变体动画与普通 `animation` 遵循相同引用规则，必须是非循环动画。
+- 启动动作时先读取当前状态，再按 `priority`、匹配维度数量和配置顺序选择变体；找不到匹配项才回退到基础动画。
+- `stateEffect` 在动作开始或完成阶段更新“目标状态”，不参与本次选图。因此化形动作应按“来源形态”分别提供普通→战斗、心魔→战斗、战斗形态强调等完整过渡。
+- 只要某种持久形态仍允许触发该动作，就必须提供对应完整雪碧图；不能在运行时给普通人物叠一层染色、飘带或特效来伪装成形态版本。
+
+同一个 action 还可以用 `stateDialogues` 让不同形态保持不同语气：
+
+```json
+{
+  "dialogue": {
+    "lines": [{ "text": { "zh-CN": "一念成锋。", "en-US": "One thought becomes an edge." } }]
+  },
+  "stateDialogues": [
+    {
+      "priority": 90,
+      "match": { "form": "attack" },
+      "dialogue": {
+        "lines": [{ "text": { "zh-CN": "锋起，破妄。", "en-US": "Edge rise—shatter illusion." } }]
+      }
+    },
+    {
+      "priority": 90,
+      "match": { "form": "demon" },
+      "dialogue": {
+        "lines": [{ "text": { "zh-CN": "现在后悔，晚了。", "en-US": "Too late for regrets." } }]
+      }
+    }
+  ]
+}
+```
+
+- 每个 action 最多 16 个对白变体；`priority`、`match` 和回退顺序与 `stateAnimations` 一致。
+- 动画与对白在动作真正启动时读取同一个人物状态快照；随后 `stateEffect` 即使立即改状态，也不会改变本次动作的图或台词。
+- 未命中变体时回退到普通 `dialogue`。频率、延迟、持续时间、anchor、权重和本地化均使用完整 dialogue 契约。
+- 固定 `audio` 仍是 action 级配置；若各形态录音内容不同，应先扩展同样的状态音频契约，不能让固定语音和状态对白互相矛盾。
+
 ## 对白
 
 `dialogue.lines` 为 1–32 项。每项可以直接是字符串/本地化表，也可以是 `{ "text": ..., "weight": 1 }`。本地化表最多 16 个 locale，每段文本最长 240 字符。
@@ -145,6 +270,19 @@ Action 的 `animation`：
 - `weight`：正数；所有权重之和必须有限
 
 频繁被动 action 应降低 `chance`，避免每次都说话。对白与按键气泡使用不同槽位，动作被打断、模型切换或销毁时必须由现有运行时清理。
+
+## 动作语音
+
+`audio` 为 action 的可选增强项，不能单独替代 `animation`/`dialogue` 来决定动作生命周期：
+
+- `file`：不带前缀时相对当前 `module.json`；`@model/audio/...` 表示模型根目录共享音频。
+- `chance`：`(0, 1]`，默认 1。
+- `delayMs`：非负，默认 0；通常与气泡的 `dialogue.delayMs` 保持一致。
+- `volume`：`(0, 1]`，默认 1。
+
+应用可直接读取 Wwise Opus `.wem`，无需把源文件转成 WAV/MP3。当前直接解码链路支持 codec version 1、`0x3041`、mapping 0、48 kHz 的 mono/stereo WEM；每个音频文件最多 8 MiB，WEM 最长 30 秒，一个模型最多引用 64 个去重后的音频文件。非 WEM 文件交给 WebView 原生音频能力，但仍受路径、存在性、普通文件和 8 MiB 上限校验。
+
+模型加载会先验证所有引用；单个可选音频播放失败只记录警告，不能打断人物动画。播放仍受设置中的“动作音效”开关控制，新动作、输入打断、切换模型或销毁会停止旧音频。带语音的 action 应让气泡文本与录音逐字对应，避免随机台词和固定录音错位。
 
 ## Trigger 类型
 
@@ -179,6 +317,10 @@ Pointer 约束：
 - 被动动作是“被动动作 → trigger 类型 → action”。
 - passive 菜单项用于用户预览/主动触发对应 action，不会伪造被动 occurrence。
 - action 冷却或运行状态不应永久禁用菜单；菜单每次打开会根据当前状态重建。
+- `manual` 明确操作不受 action 冷却限制。它从 work-idle 触发时直接开始目标动作，并可打断尚未结束的 enter/exit 或当前 action；不能先塞入不可见 pending 再等待完整生命周期。
+- 因此所有可手动触发的动画第 0 帧必须是 pet canonical，并应在前几个短帧内产生可读变化；不要用长时间 canonical 头尾填充制造“第一次点击无效”。自动/被动 `enterPet` 仍完整播放 enter 动画。
+- 输入监听未授权时，被动触发器不会运行，但可见且已加载的模型仍允许手动动作；正常结束后落到可继续点击的 pet-idle。若运行时已知有物理输入按住，则仍应退出到工作态。
+- 原生右键菜单在打开期间冻结被动计时，动作在 popup 关闭收尾时提交；设置页预览通过同一 catalog 直接触发。两条入口都必须第一次点击成功。
 
 每个希望用户主动执行的 action 都需要 `manual` trigger。每个被动 action 至少需要一个非 manual trigger，才能出现在被动目录并自动运行。
 
@@ -188,7 +330,8 @@ Pointer 约束：
 - 最多 64 个 module；单模块最多 128 animation、128 action、256 trigger。
 - 合并后模块 action 最多 512，trigger 最多 256。
 - 模型合并后最多 96 个 animation。
-- 单张 sheet 最大 16 MiP，全部 sheet 最大 64 MiP。
+- 单张 sheet 最大 16 MiP；全模型累计像素只进入校验报告用于评估内存，不再设置总量硬上限。
+- 每个音频文件最大 8 MiB，一个模型最多 64 个去重音频引用；Wwise Opus WEM 最长 30 秒。
 - 所有 id 最长 80，须匹配小写/数字开头的安全 id 规则；避免 `__proto__`、`prototype`、`constructor`。
 - 路径最长 512，只允许模型内安全相对路径；禁止 scheme、绝对路径、空段、`.`、`..` 和符号链接越界。
 - 模组只能包含数据和本地资源，不能包含可执行脚本或表达式 DSL。

@@ -1,6 +1,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
 
 import type {
+  PetAudioPayload,
   PetBehaviorConfig,
   PetPlaybackEndReason,
   PetPlaybackHandle,
@@ -17,6 +18,7 @@ import {
 } from './path'
 import { assertPetBehaviorConfig } from './pet-behavior'
 import { loadPetBehaviorModules } from './pet-behavior-module'
+import { SpriteAudioPlayer, validateSpriteAudioFiles } from './sprite-audio'
 
 export interface SpriteAnimationConfig {
   file: string
@@ -140,7 +142,7 @@ interface SpeechTextLayout {
 interface ActivePlayback {
   handle: SpritePlaybackHandle
   loop: boolean
-  returnTo: string
+  returnTo?: string
   resolve: (result: SpritePlaybackResult) => void
 }
 
@@ -149,10 +151,9 @@ interface PressedInput {
   key: string
 }
 
-// 三层上限同时防 fan-out、单图解码峰值与总驻留；64 MiP 覆盖清宵当前 65,536,000 像素，同时保留硬边界。
+// 保留动画数量和单张雪碧图上限以拦截 fan-out/单图解码炸弹；全模型累计像素不设硬阈值，允许动作模组继续扩展。
 const MAX_ANIMATION_COUNT = 96
 const MAX_SPRITESHEET_PIXELS = 16 * 1024 * 1024
-const MAX_TOTAL_SPRITESHEET_PIXELS = 64 * 1024 * 1024
 // 并发数限制解码瞬时峰值；manifest 上限则在 JSON.parse 前约束不受信任文本的驻留量。
 const MAX_CONCURRENT_IMAGE_LOADS = 4
 const MAX_MODEL_MANIFEST_BYTES = 1024 * 1024
@@ -182,6 +183,8 @@ class SpriteRenderer {
   private canvas: HTMLCanvasElement | null = null
   private context: CanvasRenderingContext2D | null = null
   private config: SpriteModelConfig | null = null
+  private modelPath: string | null = null
+  private readonly audioPlayer = new SpriteAudioPlayer()
   private animations = new Map<string, LoadedAnimation>()
   private activeAnimation = ''
   private activeFrame = 0
@@ -233,6 +236,7 @@ class SpriteRenderer {
       this.initCanvas()
 
       this.config = config
+      this.modelPath = path
       this.animations = new Map(animations)
       this.bubbleConfig = { ...defaultBubbleConfig, ...config.bubbles }
 
@@ -336,9 +340,13 @@ class SpriteRenderer {
     options: SpritePlayOptions = {},
   ): SpritePlaybackHandle | null {
     const animation = this.animations.get(name)
-    const returnTo = options.returnTo ?? this.config?.defaultAnimation
+    // 一次性宠物动作使用 hold，把“下一帧回到哪个人物状态”交给行为控制器原子决定；
+    // 键盘等旧调用仍默认回 defaultAnimation，保持既有模型行为不变。
+    const returnTo = options.completion === 'hold'
+      ? void 0
+      : options.returnTo ?? this.config?.defaultAnimation
 
-    if (!animation || !returnTo || !this.animations.has(returnTo)) return null
+    if (!animation || (returnTo !== void 0 && !this.animations.has(returnTo))) return null
 
     // 先结算旧句柄再替换 activePlayback，保证等待者一定收到一次且只收到一次终止原因。
     this.settleActivePlayback('interrupted')
@@ -452,6 +460,16 @@ class SpriteRenderer {
     this.ensureAnimationFrame()
 
     return true
+  }
+
+  public playAudio(payload: PetAudioPayload) {
+    if (!this.modelPath) return
+
+    this.audioPlayer.play(this.modelPath, payload)
+  }
+
+  public stopAudio() {
+    this.audioPlayer.stop()
   }
 
   public hasKeyboardBinding(key: string) {
@@ -629,6 +647,10 @@ class SpriteRenderer {
     if (!Number.isFinite(fps)) return
 
     this.maxFPS = fps > 0 ? Math.max(1, fps) : Number.POSITIVE_INFINITY
+  }
+
+  public setMotionSoundEnabled(enabled: boolean) {
+    this.audioPlayer.setEnabled(enabled)
   }
 
   public setMirrored(mirrored: boolean) {
@@ -1603,6 +1625,8 @@ class SpriteRenderer {
     this.canvas = null
     this.context = null
     this.config = null
+    this.modelPath = null
+    this.audioPlayer.reset()
     // 清空 Map 本身不保证浏览器立刻释放解码缓存，先断开 src 可缩短大模型切换的峰值驻留。
     this.releaseLoadedAnimations([...this.animations.entries()])
     this.animations.clear()
@@ -1684,6 +1708,13 @@ class SpriteRenderer {
     this.assertConfig(config)
     this.assertLoadGeneration(generation)
 
+    const audioFiles = config.behaviors?.pet?.modules
+      ?.flatMap(module => module.actions.flatMap(action => action.audio?.file ?? []))
+      ?? []
+
+    await validateSpriteAudioFiles(path, audioFiles, () => this.assertLoadGeneration(generation))
+    this.assertLoadGeneration(generation)
+
     return config
   }
 
@@ -1692,21 +1723,13 @@ class SpriteRenderer {
     entries: Array<[string, SpriteAnimationConfig]>,
     generation?: number,
   ) {
-    let totalPixels = 0
-
     for (const [name, animation] of entries) {
       this.assertLoadGeneration(generation)
 
       const resolvedPath = await resolveModelResourcePath(modelPath, animation.file)
       const dimensions = await this.readImageDimensions(resolvedPath)
 
-      totalPixels += this.assertSpritesheetBudget(name, dimensions)
-
-      if (totalPixels > MAX_TOTAL_SPRITESHEET_PIXELS) {
-        throw new RangeError(
-          `Sprite model exceeds the ${MAX_TOTAL_SPRITESHEET_PIXELS} total pixel budget`,
-        )
-      }
+      this.assertSpritesheetBudget(name, dimensions)
 
       this.assertSpritesheet(name, animation, dimensions)
     }
@@ -1720,7 +1743,6 @@ class SpriteRenderer {
     const loaded: Array<readonly [string, LoadedAnimation] | undefined>
       = Array.from({ length: entries.length })
     let nextIndex = 0
-    let totalPixels = 0
     let failed = false
     let firstFailure: unknown
 
@@ -1741,19 +1763,9 @@ class SpriteRenderer {
           this.assertLoadGeneration(generation)
           if (failed) throw firstFailure
 
-          // 先读取文件头并占用像素预算，绝不能等 HTMLImageElement 已把压缩炸弹展开后再判断尺寸。
+          // 先读取文件头并校验单张像素预算，绝不能等 HTMLImageElement 已把压缩炸弹展开后再判断尺寸。
           const dimensions = await this.readImageDimensions(resolvedPath)
-          const pixels = this.assertSpritesheetBudget(name, dimensions)
-          const nextTotalPixels = totalPixels + pixels
-
-          if (nextTotalPixels > MAX_TOTAL_SPRITESHEET_PIXELS) {
-            throw new RangeError(
-              `Sprite model exceeds the ${MAX_TOTAL_SPRITESHEET_PIXELS} total pixel budget`,
-            )
-          }
-
-          // JS 在 await 之间单线程执行；解码前先写入可让四个 worker 共用一个精确累计预算。
-          totalPixels = nextTotalPixels
+          this.assertSpritesheetBudget(name, dimensions)
 
           this.assertLoadGeneration(generation)
           if (failed) throw firstFailure
@@ -1763,7 +1775,7 @@ class SpriteRenderer {
           this.assertLoadGeneration(generation)
           if (failed) throw firstFailure
 
-          // 解码尺寸必须与已计入预算的文件头一致，避免格式解析分歧绕过总像素累计。
+          // 解码尺寸必须与已经校验的文件头一致，避免格式解析分歧绕过单图像素上限。
           if (image.naturalWidth !== dimensions.width
             || image.naturalHeight !== dimensions.height) {
             throw new Error(`Sprite animation "${name}" decoded dimensions differ from its header`)

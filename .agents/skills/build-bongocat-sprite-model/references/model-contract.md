@@ -129,6 +129,25 @@ Remove unused animation, mouse, or bubble sections. Do not keep placeholder bind
 - A looping bound action returns to default on key or mouse release.
 - The renderer preloads every animation, so avoid unnecessary oversized sheets.
 
+### Resource Budgets
+
+- The merged model may contain at most 96 animations.
+- Each sprite sheet may contain at most 16 MiP (`decodedWidth × decodedHeight`). The runtime reads dimensions before image decoding and also verifies the decoded dimensions match the header.
+- There is no full-model cumulative pixel hard limit. Keep cumulative pixels in QA reports to assess memory and package size, but do not reject an otherwise valid extensible model merely for exceeding an old 64 MiP total.
+- Image loading uses bounded concurrency, so many valid sheets can still increase startup time and resident memory. Reuse animations when their visible semantics are genuinely the same.
+
+### Stateful Steady Animations
+
+When `behaviors.pet.stateMachine` is present, every Visual Profile animation must be a top-level looping animation. Keep profile loops separate from one-shot transition assets:
+
+- `pet-enter`, transformations, gestures, and other actions remain non-looping.
+- relaxed, drowsy, nap, sleep, mood, and persistent-form profiles are looping and must have a seamless final-to-first transition.
+- a persistent form with different visible material needs its own closed-eye donor, looping profile, complete one-shot action sheets, and source-aware transition sheets; action `stateAnimations` performs the runtime selection.
+- the pet scene requires a fallback profile with an empty `match` map.
+- old models without a state machine continue to use `idleAnimation`; do not duplicate state declarations when only one idle is needed.
+
+The state schema and action `stateEffect` contract live in the adjacent `$author-bongocat-action-modules` skill. Sprite production owns the pixels and loop quality; the action-module skill owns semantic rules and lifetimes.
+
 ### Bindings
 
 - Prefer `bindings.keyboard` and `bindings.mouse`; legacy top-level aliases are accepted but should not be authored in new models.

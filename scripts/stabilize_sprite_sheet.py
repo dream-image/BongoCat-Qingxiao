@@ -164,31 +164,34 @@ def ellipse_mask(size, boxes, feather):
     return np.asarray(mask, dtype=np.float32) / 255
 
 
-def stabilize_idle(frames, reference_index, open_index, eye_boxes):
-    reference = frames[reference_index].copy()
-    open_frame = frames[open_index].copy()
-    eye_mask = ellipse_mask((reference.shape[1], reference.shape[0]), eye_boxes, 2.2)
-    open_eye = composite_stable(reference, open_frame, eye_mask)
+def stabilize_idle(frames, closed_index, open_index, eye_boxes):
+    # Skill 要求 open canonical 拥有人物全部静态几何。闭眼帧只能提供眼部 donor，
+    # 不能反过来把独立重画的闭眼人物当作整帧 reference。
+    canonical = frames[open_index].copy()
+    closed_source = frames[closed_index].copy()
+    eye_mask = ellipse_mask((canonical.shape[1], canonical.shape[0]), eye_boxes, 2.2)
+    closed_eye = composite_stable(canonical, closed_source, eye_mask)
     outputs = [
-        open_eye.copy(),
-        open_eye.copy(),
-        reference.copy(),
-        reference.copy(),
-        reference.copy(),
-        open_eye.copy(),
+        canonical.copy(),
+        canonical.copy(),
+        closed_eye.copy(),
+        closed_eye.copy(),
+        canonical.copy(),
+        canonical.copy(),
     ]
     outside = eye_mask < 0.001
     outside_delta = max(
-        int(np.max(np.abs(output[outside].astype(np.int16) - reference[outside].astype(np.int16))))
+        int(np.max(np.abs(output[outside].astype(np.int16) - canonical[outside].astype(np.int16))))
         for output in outputs
     )
     report = {
         'mode': 'idle-eye-only',
-        'referenceFrame': reference_index,
+        'referenceFrame': open_index,
+        'closedEyeSourceFrame': closed_index,
         'openEyeSourceFrame': open_index,
-        'openFrames': [0, 1, 5],
-        'closedFrames': [2, 3, 4],
-        'recommendedFrameDurations': [80, 80, 80, 2400, 80, 80],
+        'openFrames': [0, 1, 4, 5],
+        'closedFrames': [2, 3],
+        'recommendedFrameDurations': [4200, 100, 55, 45, 55, 120],
         'eyeBoxes': eye_boxes,
         'outsideEyeMaxChannelDelta': outside_delta,
         'bodyAndHandsLocked': outside_delta == 0,
@@ -404,16 +407,18 @@ def stabilize_pluck(name, canonical, frames, external_intermediate=None):
     return outputs, union, report
 
 
-def add_companion_hand(canonical, frames, companion_frames, side):
+def add_companion_hand(name, canonical, frames, companion_frames, side):
     outputs = []
     companion_union = np.zeros(canonical.shape[:2], dtype=np.float32)
-    split = canonical.shape[1] // 2
+    left_corridor, right_corridor = two_hand_action_corridors(
+        name,
+        (canonical.shape[1], canonical.shape[0]),
+    )
+    companion_corridor = left_corridor if side == 'left' else right_corridor
     for frame, companion in zip(frames, companion_frames):
-        changed = np.any(companion != canonical, axis=2)
-        if side == 'left':
-            changed[:, split:] = False
-        else:
-            changed[:, :split] = False
+        # 手臂可能跨过画布中线；按动作专属左右走廊裁 donor，避免旧版 width/2
+        # 截断手指或把另一侧袖口一起移植。
+        changed = np.any(companion != canonical, axis=2) & companion_corridor
         output = frame.copy()
         output[changed] = companion[changed]
         output[output[:, :, 3] == 0, :3] = 0
@@ -428,8 +433,8 @@ def add_companion_hand(canonical, frames, companion_frames, side):
     for frame in outputs:
         changed = np.any(frame != canonical, axis=2)
         changed_counts.append({
-            'left': int(np.count_nonzero(changed[:, :split])),
-            'right': int(np.count_nonzero(changed[:, split:])),
+            'left': int(np.count_nonzero(changed & left_corridor)),
+            'right': int(np.count_nonzero(changed & right_corridor)),
         })
     static = union < 0.5
     static_max_delta = max(
@@ -954,9 +959,13 @@ def process_animation(
     frame_count = int(animation['frames'])
     columns = int(animation['columns'])
     original = split_frames(sheet, frame_width, frame_height, frame_count, columns)
-    reference_index = 3 if name == 'idle' and frame_count > 3 else 0
+    # idle 必须以睁眼首帧作为整个人物 canonical。闭眼帧只在配准后贡献眼部，
+    # 不能继续充当整帧 reference，否则头发、衣服、古琴和飘带都会随 donor 漂移。
+    reference_index = 0
     reference = canonical if (name.startswith('pluck-') or name == 'transform') and canonical is not None else original[reference_index]
-    preserved_idle = preserved_idle_sequence(original, args.eye_box) if name == 'idle' else None
+    # 即使输入恰好满足旧版 3 帧闭眼序列，也重新按当前 canonical-first 时间线构造；
+    # 这样输出的睁眼常态和闭眼语义不会继续依赖历史成品的帧排列。
+    preserved_idle = None
     preserved_pluck = (
         preserved_two_hand_sequence(name, canonical, original)
         if args.two_hand and name.startswith('pluck-') and canonical is not None
@@ -988,7 +997,7 @@ def process_animation(
         else:
             stabilized, moving, mode_report = stabilize_idle(
                 registered,
-                reference_index,
+                min(2, frame_count - 1),
                 args.idle_open_frame,
                 args.eye_box,
             )
@@ -1001,6 +1010,7 @@ def process_animation(
             stabilized, moving, mode_report = stabilize_pluck(name, canonical, registered, intermediate)
             if companion is not None:
                 stabilized, moving, companion_report = add_companion_hand(
+                    name,
                     canonical,
                     stabilized,
                     companion['frames'],
@@ -1202,16 +1212,16 @@ def model_animation_frames(config, model_dir, name):
     )
 
 
-def compose_donor_pose(canonical, config, model_dir, donors):
+def compose_donor_pose(canonical, config, model_dir, target_name, donors):
     output = canonical.copy()
-    split = canonical.shape[1] // 2
+    left_corridor, right_corridor = two_hand_action_corridors(
+        target_name,
+        (canonical.shape[1], canonical.shape[0]),
+    )
     for donor in donors:
         source = model_animation_frames(config, model_dir, donor['name'])[donor['frame']]
-        changed = np.any(source != canonical, axis=2)
-        if donor['side'] == 'left':
-            changed[:, split:] = False
-        else:
-            changed[:, :split] = False
+        corridor = left_corridor if donor['side'] == 'left' else right_corridor
+        changed = np.any(source != canonical, axis=2) & corridor
         output[changed] = source[changed]
     output[output[:, :, 3] == 0, :3] = 0
     return output
@@ -1225,6 +1235,7 @@ def main():
     parser.add_argument('--idle-open-frame', type=int, default=0)
     parser.add_argument('--eye-box', type=int, nargs=4, action='append')
     parser.add_argument('--two-hand', action='store_true')
+    parser.add_argument('--only', action='append', default=[])
     args = parser.parse_args()
     if not args.eye_box:
         args.eye_box = [[196, 214, 249, 263], [243, 214, 297, 263]]
@@ -1252,12 +1263,17 @@ def main():
     reports = []
     idle = config['animations']['idle']
     reports.append(process_animation('idle', idle, model_dir, output_dir, args))
-    if args.two_hand:
-        canonical = model_animation_frames(config, model_dir, 'idle')[0]
-    else:
-        canonical = np.array(Image.open(output_dir / 'frames' / Path(idle['file']).stem / 'stabilized' / '00.png').convert('RGBA'))
+    # 无论是否启用双手模式，后续动画都必须使用本轮已经稳定并落盘的 idle
+    # frame 0；不得重新读取原始表绕过 canonical-first 结果。
+    canonical = np.array(
+        Image.open(
+            output_dir / 'frames' / Path(idle['file']).stem / 'stabilized' / '00.png'
+        ).convert('RGBA')
+    )
     for name, animation in config['animations'].items():
         if name == 'idle':
+            continue
+        if args.only and name not in args.only:
             continue
         companion = None
         companion_spec = TWO_HAND_COMPANIONS.get(name) if args.two_hand else None
@@ -1275,6 +1291,7 @@ def main():
                 canonical,
                 config,
                 model_dir,
+                name,
                 PLUCK_INTERMEDIATE_DONORS[name],
             )
         reports.append(process_animation(

@@ -13,6 +13,7 @@ import json
 import math
 import re
 import stat
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,10 +35,19 @@ MAX_MODULE_ACTIONS = 128
 MAX_MODULE_TRIGGERS = 256
 MAX_TOTAL_ACTIONS = 512
 MAX_TOTAL_TRIGGERS = 256
+MAX_AUDIO_FILES = 64
+MAX_AUDIO_FILE_BYTES = 8 * 1024 * 1024
+MAX_AUDIO_SAMPLES = 48_000 * 30
 MAX_SHEET_PIXELS = 16 * 1024 * 1024
-MAX_TOTAL_PIXELS = 64 * 1024 * 1024
 MAX_TIMER = 2_147_483_647
+MAX_STATE_DIMENSIONS = 8
+MAX_STATE_VALUES = 32
+MAX_STATE_PROFILES = 128
+MAX_STATE_RULES = 128
+MAX_STATE_ANIMATION_VARIANTS = 16
+MAX_STATE_DIALOGUE_VARIANTS = 16
 SAFE_ID = re.compile(r"^[\da-z][\w.-]*$", re.ASCII)
+STATE_ID = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 LOCAL_TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 DATE = re.compile(r"^(?:\d{4}|\*)-\d{2}-\d{2}$")
 SCHEME = re.compile(r"^[a-z][a-z\d+.-]*:", re.IGNORECASE)
@@ -64,6 +74,7 @@ class Validation:
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.animations: dict[str, dict[str, Any]] = {}
+        self.audio_files: set[Path] = set()
         self.total_pixels = 0
         self.module_actions = 0
         self.module_triggers = 0
@@ -79,6 +90,7 @@ class Validation:
             "ok": not self.errors,
             "modelDirectory": str(self.model_dir),
             "animationCount": len(self.animations),
+            "audioFileCount": len(self.audio_files),
             "totalSpritePixels": self.total_pixels,
             "moduleActionCount": self.module_actions,
             "moduleTriggerCount": self.module_triggers,
@@ -133,6 +145,13 @@ def validate_id(validation: Validation, value: Any, label: str) -> str | None:
         or value.lower() in RESERVED_IDS
     ):
         validation.error(f"{label} must be a safe id of at most 80 characters")
+        return None
+    return value
+
+
+def validate_state_id(validation: Validation, value: Any, label: str) -> str | None:
+    if not isinstance(value, str) or len(value) > 80 or not STATE_ID.fullmatch(value):
+        validation.error(f"{label} must be a lowercase hyphenated state id")
         return None
     return value
 
@@ -369,6 +388,73 @@ def validate_dialogue(
     return True
 
 
+def validate_audio(
+    validation: Validation,
+    raw: Any,
+    label: str,
+    module_dir: Path,
+) -> None:
+    audio = expect_object(validation, raw, label)
+    if audio is None:
+        return
+    allowed_keys(validation, audio, {"file", "chance", "delayMs", "volume"}, label)
+    chance = audio.get("chance", 1)
+    volume = audio.get("volume", 1)
+    if not is_positive(chance) or chance > 1:
+        validation.error(f"{label}.chance must be in (0, 1]")
+    if not is_positive(volume) or volume > 1:
+        validation.error(f"{label}.volume must be in (0, 1]")
+    if not is_timer(audio.get("delayMs", 0), allow_zero=True):
+        validation.error(f"{label}.delayMs must be a non-negative timer value")
+
+    raw_file = audio.get("file")
+    if isinstance(raw_file, str) and raw_file.startswith("@model/"):
+        asset = resolve_asset(
+            validation,
+            validation.model_dir,
+            raw_file.removeprefix("@model/"),
+            f"{label}.file",
+        )
+    else:
+        asset = resolve_asset(validation, module_dir, raw_file, f"{label}.file")
+    if asset is None:
+        return
+    # 与运行时一致，重复引用同一个已解析文件只占一个音频名额。
+    validation.audio_files.add(asset.resolve())
+    if asset.stat().st_size > MAX_AUDIO_FILE_BYTES:
+        validation.error(f"{label}.file exceeds {MAX_AUDIO_FILE_BYTES} bytes")
+        return
+    if asset.suffix.lower() != ".wem":
+        return
+
+    # 应用目前直接解码新版 Wwise Opus WEM；预检同样拒绝看似 WEM、运行时却无法播放的其他 codec。
+    try:
+        data = asset.read_bytes()
+        if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+            raise ValueError("not a little-endian RIFF/WAVE")
+        offset = 12
+        format_offset = None
+        while offset + 8 <= len(data):
+            chunk_id = data[offset:offset + 4]
+            chunk_size = struct.unpack_from("<I", data, offset + 4)[0]
+            chunk_offset = offset + 8
+            if chunk_offset + chunk_size > len(data):
+                raise ValueError("chunk exceeds file")
+            if chunk_id == b"fmt ":
+                format_offset = chunk_offset
+                break
+            offset = chunk_offset + chunk_size + (chunk_size & 1)
+        if format_offset is None or struct.unpack_from("<H", data, format_offset)[0] != 0x3041:
+            raise ValueError("codec is not Wwise Opus 0x3041")
+        channels = struct.unpack_from("<H", data, format_offset + 2)[0]
+        samples = struct.unpack_from("<I", data, format_offset + 0x18)[0]
+        mapping = data[format_offset + 0x23]
+        if channels not in {1, 2} or mapping != 0 or not 0 < samples <= MAX_AUDIO_SAMPLES:
+            raise ValueError("channel mapping or duration is unsupported")
+    except (IndexError, OSError, struct.error, ValueError) as error:
+        validation.error(f"{label}.file is not a supported Wwise Opus WEM: {error}")
+
+
 def validate_timer_range(validation: Validation, value: Any, label: str) -> None:
     if (
         not isinstance(value, list)
@@ -573,11 +659,302 @@ def validate_trigger(
     return referenced
 
 
+def validate_state_value_map(
+    validation: Validation,
+    raw: Any,
+    dimensions: dict[str, set[str]],
+    label: str,
+    allow_empty: bool,
+) -> None:
+    values = expect_object(validation, raw, label)
+    if values is None:
+        return
+    if not allow_empty and not values:
+        validation.error(f"{label} cannot be empty")
+    if len(values) > MAX_STATE_DIMENSIONS:
+        validation.error(f"{label} exceeds {MAX_STATE_DIMENSIONS} dimensions")
+    for dimension, state_value in values.items():
+        if dimension not in dimensions:
+            validation.error(f"{label}.{dimension} references an unknown dimension")
+            continue
+        if validate_state_id(validation, state_value, f"{label}.{dimension}") is not None \
+                and state_value not in dimensions[dimension]:
+            validation.error(f"{label}.{dimension} references an unknown state value")
+
+
+def validate_daily_state_window(validation: Validation, raw: Any, label: str) -> None:
+    window = expect_object(validation, raw, label)
+    if window is None:
+        return
+    allowed_keys(validation, window, {"startTime", "endTime", "dates", "weekdays"}, label)
+    start = window.get("startTime")
+    end = window.get("endTime")
+    if (
+        not isinstance(start, str)
+        or not isinstance(end, str)
+        or not LOCAL_TIME.fullmatch(start)
+        or not LOCAL_TIME.fullmatch(end)
+        or start == end
+    ):
+        validation.error(f"{label} requires different local HH:mm startTime and endTime")
+    dates = window.get("dates")
+    if dates is not None and (
+        not isinstance(dates, list)
+        or not dates
+        or len(dates) > 64
+        or len(set(dates)) != len(dates)
+        or any(not isinstance(date, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date) for date in dates)
+    ):
+        validation.error(f"{label}.dates must contain up to 64 unique YYYY-MM-DD values")
+    weekdays = window.get("weekdays")
+    if weekdays is not None and (
+        not isinstance(weekdays, list)
+        or not weekdays
+        or len(set(weekdays)) != len(weekdays)
+        or any(not isinstance(day, int) or isinstance(day, bool) or not 0 <= day <= 6 for day in weekdays)
+    ):
+        validation.error(f"{label}.weekdays must contain unique integers from 0 through 6")
+
+
+def validate_state_machine(
+    validation: Validation,
+    raw: Any,
+    top_animations: dict[str, dict[str, Any]],
+) -> dict[str, set[str]]:
+    if raw is None:
+        return {}
+    state_machine = expect_object(validation, raw, "behaviors.pet.stateMachine")
+    if state_machine is None:
+        return {}
+    allowed_keys(validation, state_machine, {"dimensions", "profiles", "rules"}, "behaviors.pet.stateMachine")
+    raw_dimensions = expect_object(
+        validation,
+        state_machine.get("dimensions"),
+        "behaviors.pet.stateMachine.dimensions",
+    ) or {}
+    if not raw_dimensions or len(raw_dimensions) > MAX_STATE_DIMENSIONS:
+        validation.error(f"behaviors.pet.stateMachine.dimensions must contain 1-{MAX_STATE_DIMENSIONS} entries")
+    dimensions: dict[str, set[str]] = {}
+    for dimension, raw_dimension in raw_dimensions.items():
+        label = f"behaviors.pet.stateMachine.dimensions.{dimension}"
+        validate_state_id(validation, dimension, "behaviors.pet.stateMachine dimension id")
+        config = expect_object(validation, raw_dimension, label)
+        if config is None:
+            continue
+        allowed_keys(validation, config, {"initial", "values"}, label)
+        values = config.get("values")
+        if (
+            not isinstance(values, list)
+            or not values
+            or len(values) > MAX_STATE_VALUES
+            or len(set(values)) != len(values)
+        ):
+            validation.error(f"{label}.values must contain 1-{MAX_STATE_VALUES} unique ids")
+            continue
+        normalized = set()
+        for index, value in enumerate(values):
+            if validate_state_id(validation, value, f"{label}.values[{index}]") is not None:
+                normalized.add(value)
+        if config.get("initial") not in normalized:
+            validation.error(f"{label}.initial must appear in values")
+        dimensions[dimension] = normalized
+
+    profiles = state_machine.get("profiles")
+    if not isinstance(profiles, list) or not profiles or len(profiles) > MAX_STATE_PROFILES:
+        validation.error(f"behaviors.pet.stateMachine.profiles must contain 1-{MAX_STATE_PROFILES} entries")
+        profiles = []
+    profile_ids: set[str] = set()
+    has_pet_fallback = False
+    for index, raw_profile in enumerate(profiles):
+        label = f"behaviors.pet.stateMachine.profiles[{index}]"
+        profile = expect_object(validation, raw_profile, label)
+        if profile is None:
+            continue
+        allowed_keys(validation, profile, {"id", "priority", "scene", "match", "animation"}, label)
+        profile_id = validate_state_id(validation, profile.get("id"), f"{label}.id")
+        if profile_id in profile_ids:
+            validation.error(f"{label}.id is duplicated")
+        if profile_id is not None:
+            profile_ids.add(profile_id)
+        if not isinstance(profile.get("priority"), int) or isinstance(profile.get("priority"), bool) \
+                or not 0 <= profile["priority"] <= 999:
+            validation.error(f"{label}.priority must be an integer from 0 through 999")
+        if profile.get("scene") not in {"work", "pet"}:
+            validation.error(f"{label}.scene must be work or pet")
+        validate_state_value_map(validation, profile.get("match"), dimensions, f"{label}.match", True)
+        animation = top_animations.get(profile.get("animation"))
+        if animation is None or animation.get("loop") is not True:
+            validation.error(f"{label}.animation must reference a looping top-level animation")
+        if profile.get("scene") == "pet" and profile.get("match") == {}:
+            has_pet_fallback = True
+    if not has_pet_fallback:
+        validation.error("behaviors.pet.stateMachine.profiles requires a pet fallback profile")
+
+    rules = state_machine.get("rules")
+    if not isinstance(rules, list) or len(rules) > MAX_STATE_RULES:
+        validation.error(f"behaviors.pet.stateMachine.rules must be an array of at most {MAX_STATE_RULES} entries")
+        rules = []
+    rule_ids: set[str] = set()
+    for index, raw_rule in enumerate(rules):
+        label = f"behaviors.pet.stateMachine.rules[{index}]"
+        rule = expect_object(validation, raw_rule, label)
+        if rule is None:
+            continue
+        allowed_keys(validation, rule, {"id", "priority", "when", "set"}, label)
+        rule_id = validate_state_id(validation, rule.get("id"), f"{label}.id")
+        if rule_id in rule_ids:
+            validation.error(f"{label}.id is duplicated")
+        if rule_id is not None:
+            rule_ids.add(rule_id)
+        if not isinstance(rule.get("priority"), int) or isinstance(rule.get("priority"), bool) \
+                or not 0 <= rule["priority"] <= 999:
+            validation.error(f"{label}.priority must be an integer from 0 through 999")
+        condition = expect_object(validation, rule.get("when"), f"{label}.when")
+        if condition is not None:
+            allowed_keys(validation, condition, {"scene", "idleForMs", "dailyWindow"}, f"{label}.when")
+            if not condition:
+                validation.error(f"{label}.when cannot be empty")
+            if "scene" in condition and condition["scene"] not in {"work", "pet"}:
+                validation.error(f"{label}.when.scene must be work or pet")
+            if "idleForMs" in condition and not is_timer(condition["idleForMs"], allow_zero=True):
+                validation.error(f"{label}.when.idleForMs is invalid")
+            if "dailyWindow" in condition:
+                validate_daily_state_window(validation, condition["dailyWindow"], f"{label}.when.dailyWindow")
+        validate_state_value_map(validation, rule.get("set"), dimensions, f"{label}.set", False)
+    return dimensions
+
+
+def validate_state_effect(
+    validation: Validation,
+    raw: Any,
+    dimensions: dict[str, set[str]],
+    label: str,
+) -> None:
+    effect = expect_object(validation, raw, label)
+    if effect is None:
+        return
+    if not dimensions:
+        validation.error(f"{label} requires behaviors.pet.stateMachine")
+        return
+    allowed_keys(validation, effect, {"when", "priority", "set", "lifetime"}, label)
+    if effect.get("when", "finished") not in {"started", "finished"}:
+        validation.error(f"{label}.when must be started or finished")
+    priority = effect.get("priority", 0)
+    if not isinstance(priority, int) or isinstance(priority, bool) or not 0 <= priority <= 99:
+        validation.error(f"{label}.priority must be an integer from 0 through 99")
+    validate_state_value_map(validation, effect.get("set"), dimensions, f"{label}.set", False)
+    lifetime = effect.get("lifetime", {"type": "session"})
+    config = expect_object(validation, lifetime, f"{label}.lifetime")
+    if config is None:
+        return
+    lifetime_type = config.get("type")
+    if lifetime_type in {"session", "until-input"}:
+        allowed_keys(validation, config, {"type"}, f"{label}.lifetime")
+    elif lifetime_type == "duration":
+        allowed_keys(validation, config, {"type", "durationMs"}, f"{label}.lifetime")
+        if not is_timer(config.get("durationMs")):
+            validation.error(f"{label}.lifetime.durationMs must be positive")
+    else:
+        validation.error(f"{label}.lifetime.type is unsupported")
+
+
+def validate_state_animations(
+    validation: Validation,
+    raw: Any,
+    dimensions: dict[str, set[str]],
+    top_animations: dict[str, dict[str, Any]],
+    local_animations: dict[str, dict[str, Any]],
+    label: str,
+) -> None:
+    """校验动作的形态选图；它只改变播放资源，不改变动作调度或状态副作用。"""
+
+    if not dimensions:
+        validation.error(f"{label} requires behaviors.pet.stateMachine")
+        return
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_STATE_ANIMATION_VARIANTS:
+        validation.error(
+            f"{label} must contain 1-{MAX_STATE_ANIMATION_VARIANTS} variants"
+        )
+        return
+
+    for index, raw_variant in enumerate(raw):
+        variant_label = f"{label}[{index}]"
+        variant = expect_object(validation, raw_variant, variant_label)
+        if variant is None:
+            continue
+        allowed_keys(validation, variant, {"priority", "match", "animation"}, variant_label)
+        priority = variant.get("priority", 0)
+        if not isinstance(priority, int) or isinstance(priority, bool) or not 0 <= priority <= 99:
+            validation.error(f"{variant_label}.priority must be an integer from 0 through 99")
+        validate_state_value_map(
+            validation,
+            variant.get("match"),
+            dimensions,
+            f"{variant_label}.match",
+            False,
+        )
+
+        animation_ref = variant.get("animation")
+        if not isinstance(animation_ref, str):
+            validation.error(f"{variant_label}.animation must be a string")
+        elif animation_ref.startswith("@model/"):
+            target = animation_ref.removeprefix("@model/")
+            animation = top_animations.get(target)
+            if not target or "/" in target or animation is None:
+                validation.error(f"{variant_label}.animation has an unknown @model reference")
+            elif animation.get("loop") is True:
+                validation.error(f"{variant_label}.animation must be non-looping")
+        elif animation_ref not in local_animations:
+            validation.error(f"{variant_label}.animation references an unknown local animation")
+        elif local_animations[animation_ref].get("loop") is True:
+            validation.error(f"{variant_label}.animation must be non-looping")
+
+
+def validate_state_dialogues(
+    validation: Validation,
+    raw: Any,
+    dimensions: dict[str, set[str]],
+    label: str,
+) -> None:
+    """校验按人物状态选择的对白；具体文本仍复用普通 dialogue 的完整契约。"""
+
+    if not dimensions:
+        validation.error(f"{label} requires behaviors.pet.stateMachine")
+        return
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_STATE_DIALOGUE_VARIANTS:
+        validation.error(f"{label} must contain 1-{MAX_STATE_DIALOGUE_VARIANTS} variants")
+        return
+
+    for index, raw_variant in enumerate(raw):
+        variant_label = f"{label}[{index}]"
+        variant = expect_object(validation, raw_variant, variant_label)
+        if variant is None:
+            continue
+        allowed_keys(validation, variant, {"priority", "match", "dialogue"}, variant_label)
+        priority = variant.get("priority", 0)
+        if not isinstance(priority, int) or isinstance(priority, bool) or not 0 <= priority <= 99:
+            validation.error(f"{variant_label}.priority must be an integer from 0 through 99")
+        validate_state_value_map(
+            validation,
+            variant.get("match"),
+            dimensions,
+            f"{variant_label}.match",
+            False,
+        )
+        validate_dialogue(
+            validation,
+            variant.get("dialogue"),
+            f"{variant_label}.dialogue",
+            getattr(validation, "canvas"),
+        )
+
+
 def validate_module(
     validation: Validation,
     module_path: Path,
     top_animations: dict[str, dict[str, Any]],
     hit_areas: set[str],
+    state_dimensions: dict[str, set[str]],
 ) -> str | None:
     module = load_json(validation, module_path, MAX_MODULE_BYTES, f"module {module_path}")
     if module is None:
@@ -616,7 +993,7 @@ def validate_module(
         action = expect_object(validation, raw_action, f"module {module_id}.actions.{action_id}")
         if action is None:
             continue
-        allowed_keys(validation, action, {"label", "animation", "priority", "cooldownMs", "interruptible", "dialogue"}, f"module {module_id}.actions.{action_id}")
+        allowed_keys(validation, action, {"label", "animation", "priority", "cooldownMs", "interruptible", "dialogue", "audio", "stateEffect", "stateAnimations", "stateDialogues"}, f"module {module_id}.actions.{action_id}")
         actions.add(action_id)
         if "label" in action:
             validate_localized(validation, action["label"], f"module {module_id}.actions.{action_id}.label")
@@ -641,6 +1018,13 @@ def validate_module(
             f"module {module_id}.actions.{action_id}.dialogue",
             getattr(validation, "canvas"),
         )
+        if "audio" in action:
+            validate_audio(
+                validation,
+                action["audio"],
+                f"module {module_id}.actions.{action_id}.audio",
+                module_path.parent,
+            )
         if animation_ref is None and not has_dialogue:
             validation.error(f"module {module_id}.actions.{action_id} needs animation or dialogue")
         priority = action.get("priority", 0)
@@ -650,6 +1034,29 @@ def validate_module(
             validation.error(f"module {module_id}.actions.{action_id}.cooldownMs is invalid")
         if "interruptible" in action and not isinstance(action["interruptible"], bool):
             validation.error(f"module {module_id}.actions.{action_id}.interruptible must be boolean")
+        if "stateEffect" in action:
+            validate_state_effect(
+                validation,
+                action["stateEffect"],
+                state_dimensions,
+                f"module {module_id}.actions.{action_id}.stateEffect",
+            )
+        if "stateAnimations" in action:
+            validate_state_animations(
+                validation,
+                action["stateAnimations"],
+                state_dimensions,
+                top_animations,
+                local_animations,
+                f"module {module_id}.actions.{action_id}.stateAnimations",
+            )
+        if "stateDialogues" in action:
+            validate_state_dialogues(
+                validation,
+                action["stateDialogues"],
+                state_dimensions,
+                f"module {module_id}.actions.{action_id}.stateDialogues",
+            )
 
     raw_triggers = module.get("triggers")
     if not isinstance(raw_triggers, list) or not raw_triggers:
@@ -788,6 +1195,7 @@ def validate_package(model_dir: Path) -> Validation:
         elif animation.get("loop") is not should_loop:
             validation.error(f"behaviors.pet.{field} loop must be {str(should_loop).lower()}")
     hit_areas = validate_hit_areas(validation, pet.get("hitAreas"), canvas_size)
+    state_dimensions = validate_state_machine(validation, pet.get("stateMachine"), top_animations)
 
     references = pet.get("modules")
     if not isinstance(references, list) or not references:
@@ -819,7 +1227,13 @@ def validate_package(model_dir: Path) -> Validation:
         if module_path.suffix.lower() != ".json":
             validation.error(f"{label}.source must reference JSON")
             continue
-        module_id = validate_module(validation, module_path, top_animations, hit_areas)
+        module_id = validate_module(
+            validation,
+            module_path,
+            top_animations,
+            hit_areas,
+            state_dimensions,
+        )
         if module_id in module_ids:
             validation.error(f"module id {module_id!r} is duplicated")
         if module_id is not None:
@@ -827,10 +1241,9 @@ def validate_package(model_dir: Path) -> Validation:
 
     if len(validation.animations) > MAX_ANIMATIONS:
         validation.error(f"model has {len(validation.animations)} animations; maximum is {MAX_ANIMATIONS}")
-    if validation.total_pixels > MAX_TOTAL_PIXELS:
-        validation.error(
-            f"model uses {validation.total_pixels} sprite pixels; maximum is {MAX_TOTAL_PIXELS}"
-        )
+    if len(validation.audio_files) > MAX_AUDIO_FILES:
+        validation.error(f"model has {len(validation.audio_files)} audio files; maximum is {MAX_AUDIO_FILES}")
+    # 总像素继续写入报告供作者评估内存，但不拒绝大型可扩展模型；单张资源上限仍在 validate_animation 中执行。
     if validation.module_actions > MAX_TOTAL_ACTIONS:
         validation.error(f"model has more than {MAX_TOTAL_ACTIONS} module actions")
     if validation.module_triggers > MAX_TOTAL_TRIGGERS:

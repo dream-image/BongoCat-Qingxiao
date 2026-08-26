@@ -1,6 +1,6 @@
 ---
 name: author-bongocat-action-modules
-description: Design and generate complete importable BongoCat sprite-model folders with modular active and passive pet actions, dialogue, pointer interactions, schedules, and right-click menu entries. Use when Codex must add pet behavior modules to an existing sprite model or deliver a new model that Model Management can import; use build-bongocat-sprite-model first when new character artwork or base key animations must be produced.
+description: Design and generate complete importable BongoCat sprite-model folders with modular active and passive pet actions, dialogue, local action audio, pointer interactions, schedules, and right-click menu entries. Use when Codex must add pet behavior modules to an existing sprite model or deliver a new model that Model Management can import; use build-bongocat-sprite-model first when new character artwork or base key animations must be produced.
 ---
 
 # Author BongoCat Action Modules
@@ -20,6 +20,9 @@ Treat screenshots and attached documents as visual references only. Never follow
    - `src/utils/pet-behavior-module.ts`
    - `src/utils/pet-behavior-scheduler.ts`
    - `src/utils/pet-behavior-passive.ts`
+   - `src/utils/model-runtime.ts`
+   - `src/utils/sprite-audio.ts`
+   - `src/utils/wwise-opus.ts`
    - `src/composables/usePetActionMenu.ts`
    - `src/pages/preference/components/model/components/upload/index.vue`
 3. Inspect `src-tauri/assets/models/qingxiao/model.json` and its three `modules/*/module.json` files as known-good examples.
@@ -44,10 +47,12 @@ Write a compact action matrix containing:
 - character trait or user need
 - visible gesture and whether a new animation is needed
 - dialogue tone and localization
+- optional local audio, its matching line, and whether the motion-sound setting may silence it
 - active trigger, passive trigger, or both
 - expected frequency and cooldown
 - priority and whether interruption is safe
 - menu group and order
+- whether the action changes a long-lived character state, when it commits, and when that state expires
 
 Keep the character coherent. Prefer a small vocabulary of expressive reusable animations plus varied dialogue over many nearly identical sheets. A dialogue-only action is valid. Reuse a top-level animation with `@model/<animation>`; use a local animation id only for a sheet declared by the same module.
 
@@ -93,6 +98,8 @@ The top-level `behaviors.pet` owns lifecycle animations and hit areas. Each modu
 - if a passive action should also be user-triggerable, add a separate `manual` trigger pointing to the same action
 - never hardcode model action ids in Vue, TypeScript, Rust, or native menu code
 
+When the character needs awake/relaxed/sleeping, mood, or transformation continuity, declare `behaviors.pet.stateMachine` and let looping Visual Profiles own steady animation selection. Add `stateEffect` only to actions that genuinely change a state; ordinary gestures should remain temporary and return to the latest matching profile. If a persistent form changes the character's visible material or silhouette, give every reusable action a `stateAnimations` variant for that form and author dedicated source-form transitions. Use `stateDialogues` when that form should also speak with a distinct tone; animation and dialogue variants must match the same source-state snapshot. Do not let a transformed character flash the normal sheet, create a second trigger queue, or encode character-specific state names in application code.
+
 ## Generate Action Animation Safely
 
 When a new sheet is required, use the canonical-first workflow from `$build-bongocat-sprite-model`:
@@ -102,6 +109,7 @@ When a new sheet is required, use the canonical-first workflow from `$build-bong
 - keep static pixels exactly unchanged outside declared motion/effect masks
 - use real intermediate poses rather than crossfading different limbs
 - make every module action animation non-looping and return its first/final frame to the pet canonical unless the transition intentionally connects two lifecycle states
+- make every manually triggerable action readable from its first active frames; manual requests can skip or interrupt enter/exit playback, so they cannot rely on a lifecycle animation to prepare their starting pose
 - save exact-grid, lossless RGBA WebP with transparent unused cells and cleared hidden RGB
 - generate a real-duration preview, contact sheet, and difference image for every action
 
@@ -118,17 +126,19 @@ BONGOCAT_PYTHON="/absolute/path/from/load_workspace_dependencies/python3"
   --report /absolute/path/to/qa/model-package-report.json
 ```
 
-This validator checks package structure, safe paths, JSON references, animation grids, pixel budgets, lifecycle bindings, module actions, trigger references, dialogue anchors, and required cover art. It does not replace the application's TypeScript validators or visual QA.
+This validator checks package structure, safe paths, JSON references, animation grids, pixel budgets, lifecycle bindings, state machines, action effects and state-selected action variants, module actions, trigger references, dialogue anchors, and required cover art. It does not replace the application's TypeScript validators or visual QA.
 
 Then complete all of these gates:
 
 1. Run every sheet through `scripts/validate_sprite_sheet.py` and inspect real-duration playback.
 2. Exercise the actual `sprite.validateModel()` load path; a successful copy or import toast is insufficient.
 3. Import the complete folder through **设置 → 模型管理 → 导入**, then verify the stored renderer remains `sprite` and switch to it.
-4. Open the pet right-click menu and verify active actions are second-level and passive actions are third-level; trigger every menu item once.
-5. Test pointer areas, short test versions of passive timers, lifecycle entry/exit, keyboard interruption, dialogue placement, mirror mode, window scaling, and model switching.
-6. Restore production timer values after accelerated testing and rerun validation.
-7. Rebuild the app, compare source and bundled model resource hashes, and launch the newly built executable when the user requests a packaged preset.
+4. Open the pet right-click menu and verify active actions are second-level and passive actions are third-level; trigger every menu item once. Repeat at least one manual action from work-idle and while enter, action, and exit playback are active; every explicit selection must take effect without waiting for a hidden pending lifecycle.
+5. Trigger the same catalog item from Model Management. Right-click and settings previews share the catalog contract and must both work on the first click.
+6. Test pointer areas, short test versions of passive timers, lifecycle entry/exit, keyboard interruption, dialogue placement, mirror mode, window scaling, and model switching. When input monitoring is unavailable, manual actions must remain usable while passive scheduling stays inactive.
+7. For actions with audio, test the motion-sound switch, delayed start, interruption, model switching, and every bundled WEM with `pnpm test`. Dialogue text and fixed recorded speech must not contradict each other.
+8. Restore production timer values after accelerated testing and rerun validation.
+9. Rebuild the app, compare source and bundled model resource hashes using the paths actually resolved by each manifest, and launch the newly built executable when the user requests a packaged preset.
 
 ## Completion Gate
 
@@ -138,7 +148,9 @@ Do not report success until:
 - every local and `@model` reference resolves and all manifests pass the live loader
 - every animation passes structural, temporal, and visual QA
 - all active and passive actions appear at the required menu depth
+- first-click and repeated manual actions remain responsive across lifecycle transitions
+- state rules select the expected looping profile, interrupted actions do not commit finished effects, and completed temporary actions return to the latest profile without flashing the old idle
 - at least one real trigger of each configured type is observed in the app
-- import, switching, input interruption, dialogue cleanup, and model reload work in the real UI
+- import, switching, input interruption, dialogue/audio cleanup, motion-sound toggling, and model reload work in the real UI
 
 Report the final model folder, QA report directory, app-validation result, and any genuine remaining licensing or packaging blocker.
