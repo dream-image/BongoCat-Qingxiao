@@ -6,6 +6,12 @@
 
 本项目在 [`.agents/skills`](../.agents/skills/) 中维护了两套项目级 AI Skill，用于把角色素材和行为设计转换为 BongoCat 可以直接导入的完整 Sprite 模型。Skill 会以仓库当前的 TypeScript 类型、校验器和清宵模型为事实来源，因此比脱离项目编写的通用提示词更可靠。
 
+## 仓库与分支约定
+
+AI 在修改模型、动作模组、运行时或 Skill 前，应先确认当前代码来自 [`dream-image/BongoCat-Qingxiao`](https://github.com/dream-image/BongoCat-Qingxiao)，并基于最新 `main` 工作。完成的代码、资源和文档也应提交到该仓库的 `main`；`ayangweb/BongoCat` 只作为开源上游参考，旧 `dream-image/BongoCat` fork 及 `codex/*` 功能分支不再作为清宵版本的迭代或发布入口。
+
+不同克隆可以使用不同的本地 remote 名称，因此判断目标时应核对 remote URL 和跟踪分支，不要只依赖 `origin`、`fork` 或 `qingxiao` 这类本地名称。
+
 ## 两个 Skill 的分工
 
 ### `$build-bongocat-sprite-model`

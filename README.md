@@ -21,6 +21,13 @@
 > [!IMPORTANT]
 > 本仓库是基于开源项目 [ayangweb/BongoCat](https://github.com/ayangweb/BongoCat) 独立维护的修改版，不是原项目的官方发行版。感谢原作者及所有上游贡献者提供的跨平台基础实现。
 
+## 维护仓库与默认分支
+
+- 当前维护仓库是 [`dream-image/BongoCat-Qingxiao`](https://github.com/dream-image/BongoCat-Qingxiao)，默认且持续迭代的分支是 `main`。
+- 新功能、修复、文档和发行包均以该仓库的 `main` 为准；全新克隆后，本地 `origin/main` 会自动指向这一维护主线。
+- [`ayangweb/BongoCat`](https://github.com/ayangweb/BongoCat) 仅作为开源上游和同步参考，不是清宵版本的提交目标。
+- 历史维护文档中的 `dream-image/BongoCat`、`fork/*` 和 `codex/*` 记录保留用于追溯当时的开发过程，不代表当前交付分支。
+
 ## 清宵预览
 
 上图是当前内置的清宵工作形态。人物、古琴和背后双层飘带来自同一套透明 canonical；69 套正式动画只在明确的表情、手袖和特效区域内变化，避免人物位置、尺寸、材质和五官逐帧漂移。她会根据键盘输入弹琴，也会在空闲、特定时间、久别归来或用户主动操作时进入宠物形态并播放不同动作。
@@ -59,6 +66,7 @@
 ```shell
 git clone https://github.com/dream-image/BongoCat-Qingxiao.git
 cd BongoCat-Qingxiao
+git switch main
 pnpm install
 pnpm tauri dev
 ```
