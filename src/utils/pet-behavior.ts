@@ -2,6 +2,7 @@ import type {
   PetBehaviorRuntimeModule,
   PetLocalizedText,
   PetRuntimeAction,
+  PetRuntimeDialogue,
   PetRuntimeIdleTrigger,
   PetRuntimeIntervalTrigger,
   PetRuntimePointerTrigger,
@@ -12,6 +13,13 @@ import type {
   PetPassiveActivitySignal,
   PetPassiveOccurrence,
 } from './pet-behavior-passive'
+import type {
+  PetCharacterStateContext,
+  PetStateAnimationVariantConfig,
+  PetStateEffectConfig,
+  PetStateMachineConfig,
+  PetStateScene,
+} from './pet-character-state'
 
 import { resolvePetLocalizedText } from './pet-behavior-module'
 import { PetPassiveTriggerEngine } from './pet-behavior-passive'
@@ -19,16 +27,20 @@ import {
   delayUntilNextScheduleScan,
   findDuePetScheduleOccurrence,
 } from './pet-behavior-scheduler'
+import { PetCharacterStateResolver } from './pet-character-state'
 
 // 宠物行为只负责“何时进入/退出、选择哪个动作”，不直接依赖 Canvas、Tauri 或 Pinia。
 // 渲染、时钟和随机数都从依赖注入，目的是让模型配置可扩展，同时把平台输入与动画实现隔离开。
-export type PetBehaviorState
+export type PetRuntimePhase
   = | 'work-idle'
     | 'pet-entering'
     | 'pet-idle'
     | 'pet-action'
     | 'pet-interaction'
     | 'pet-exiting'
+
+// 兼容设置页和既有调用方的公开名称；内部已把它明确视为播放阶段，而非人物语义状态。
+export type PetBehaviorState = PetRuntimePhase
 
 export type PetInputStatus = 'unavailable' | 'starting' | 'ready'
 
@@ -66,6 +78,7 @@ export interface PetAutonomousActionConfig {
   id: string
   label?: PetLocalizedText
   animation: string
+  stateAnimations?: PetStateAnimationVariantConfig[]
   weight: number
   cooldownMs?: number
 }
@@ -80,6 +93,7 @@ interface PetInteractionBaseConfig {
   label?: PetLocalizedText
   area: string
   animation: string
+  stateAnimations?: PetStateAnimationVariantConfig[]
   cooldownMs?: number
 }
 
@@ -118,6 +132,7 @@ export interface PetBehaviorConfig {
   hitAreas?: Record<string, PetHitArea>
   interactions?: PetInteractionConfig[]
   modules?: PetBehaviorRuntimeModule[]
+  stateMachine?: PetStateMachineConfig
 }
 
 export type PetPlaybackEndReason = 'finished' | 'interrupted' | 'destroyed'
@@ -133,6 +148,7 @@ export interface PetPlaybackHandle {
 
 export interface PetPlayOptions {
   returnTo?: string
+  completion?: 'return' | 'hold'
 }
 
 export interface PetPlaybackDriver {
@@ -262,7 +278,7 @@ interface PetActionRequest {
 }
 
 interface ActivePetAction {
-  actionId: string
+  action: PetRuntimeAction
   source: PetActionSource
   priority: number
   interruptible: boolean
@@ -299,6 +315,14 @@ const PET_MAX_TOTAL_MODULE_TRIGGERS = 256
 const PET_MAX_PENDING_PASSIVE_OCCURRENCES = 256
 const PET_MAX_LOCALIZED_VARIANTS = 16
 const PET_MAX_TEXT_LENGTH = 240
+const PET_MAX_STATE_DIMENSIONS = 8
+const PET_MAX_STATE_VALUES_PER_DIMENSION = 32
+const PET_MAX_STATE_PROFILES = 128
+const PET_MAX_STATE_RULES = 128
+const PET_MAX_STATE_DATES = 64
+const PET_MAX_STATE_ANIMATION_VARIANTS = 16
+const PET_MAX_STATE_DIALOGUE_VARIANTS = 16
+const PET_STATE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 // 内部合成模组使用外部 safe-id 永远无法表达的前缀，从根上避免导入模块覆盖兼容配置。
 const PET_LEGACY_MODULE_ID = '@legacy'
 const PET_LOCALE_PATTERN = /^[a-z]{2,3}(?:-[a-z\d]{2,8})*$/i
@@ -310,6 +334,7 @@ export class PetBehaviorController {
   private readonly clock: PetBehaviorClock
   private readonly random: () => number
   private readonly passiveEngine: PetPassiveTriggerEngine
+  private readonly characterState: PetCharacterStateResolver
   private readonly onStateChange: PetBehaviorDependencies['onStateChange']
   private readonly context: PetBehaviorRuntimeContext
   private currentState: PetBehaviorState = 'work-idle'
@@ -320,6 +345,7 @@ export class PetBehaviorController {
   private readonly intervalNextAt = new Map<string, number>()
   private readonly idleTimers = new Map<string, PetBehaviorTimer>()
   private scheduleTimer: PetBehaviorTimer | undefined
+  private stateEvaluationTimer: PetBehaviorTimer | undefined
   private speechDelayTimer: PetBehaviorTimer | undefined
   private speechClearTimer: PetBehaviorTimer | undefined
   private audioDelayTimer: PetBehaviorTimer | undefined
@@ -345,6 +371,9 @@ export class PetBehaviorController {
   private readonly idleNextAt = new Map<string, number>()
   private readonly lastIntervalAction = new Map<string, string>()
   private idleEpoch = 0
+  // 语义空闲时间只由真实用户活动重置，不能复用动作调度器频繁重置的 idleEpoch。
+  private semanticIdleStartedAt = 0
+  private steadyAnimation: string | undefined
   private activePetAction: ActivePetAction | undefined
   private pendingAction: PetActionRequest | undefined
   private catalogRevision = 0
@@ -363,11 +392,14 @@ export class PetBehaviorController {
     this.random = dependencies.random ?? Math.random
     this.onStateChange = dependencies.onStateChange
     this.context = { ...defaultContext, ...dependencies.context }
+    this.characterState = new PetCharacterStateResolver()
     this.passiveEngine = new PetPassiveTriggerEngine({
       clock: this.clock,
       random: () => this.nextRandom(),
       onOccurrence: occurrence => this.enqueuePassiveOccurrence(occurrence),
     })
+    this.semanticIdleStartedAt = this.clock.now()
+    this.characterState.configure(config?.stateMachine, this.characterStateContext('work'))
     this.rebuildModuleCatalog()
     this.resetIdleEpoch()
   }
@@ -399,6 +431,9 @@ export class PetBehaviorController {
     this.behaviorConfig = config
     this.defaultAnimation = defaultAnimation
     this.moduleScopeId = scopeId
+    this.semanticIdleStartedAt = this.clock.now()
+    this.steadyAnimation = void 0
+    this.characterState.configure(config?.stateMachine, this.characterStateContext('work'))
     this.cooldowns.clear()
     this.activeKeyboardInputs.clear()
     this.rebuildModuleCatalog()
@@ -419,6 +454,7 @@ export class PetBehaviorController {
     if (this.destroyed) return false
 
     this.started = true
+    this.semanticIdleStartedAt = this.clock.now()
     this.resetIdleEpoch()
 
     if (!this.canRun()) return false
@@ -439,6 +475,7 @@ export class PetBehaviorController {
     this.invalidate()
     this.activeKeyboardInputs.clear()
     this.activePetAction = void 0
+    this.steadyAnimation = void 0
     this.pendingAction = void 0
     this.pendingPassiveOccurrences = []
     this.invalidateActionMenu()
@@ -470,6 +507,8 @@ export class PetBehaviorController {
     this.invalidate()
     this.behaviorConfig = void 0
     this.defaultAnimation = void 0
+    this.steadyAnimation = void 0
+    this.characterState.configure()
     this.cooldowns.clear()
     this.activeKeyboardInputs.clear()
     this.modules.clear()
@@ -628,6 +667,7 @@ export class PetBehaviorController {
 
     if (isFirstPress) {
       this.activeKeyboardInputs.add(key)
+      this.markSemanticInteraction(false)
       this.passiveEngine.notifyActivity({
         inputId: key,
         phase: 'start',
@@ -660,6 +700,7 @@ export class PetBehaviorController {
   public notifyKeyboardRelease(key: string) {
     if (this.destroyed || !this.activeKeyboardInputs.delete(key)) return false
 
+    this.markSemanticInteraction(false)
     this.passiveEngine.notifyActivity({
       inputId: key,
       phase: 'end',
@@ -691,6 +732,9 @@ export class PetBehaviorController {
     const hadActiveInputs = this.passiveEngine.hasActiveInputs
 
     this.passiveEngine.notifyActivity(signal)
+
+    // 鼠标按下、释放和离散移动都是真实活动；在菜单门禁判断前清除 until-input 情绪。
+    if (signal.source === 'mouse') this.markSemanticInteraction()
 
     if (this.menuPaused) return
 
@@ -1107,7 +1151,8 @@ export class PetBehaviorController {
     this.pausedActivationRemainingMs = void 0
     this.setState('pet-entering')
 
-    const playback = this.beginPlayback(config.enterAnimation, config.idleAnimation)
+    // 入场末帧先保持，由控制器在完成 continuation 中直接接上当时最新的状态常态。
+    const playback = this.beginPlayback(config.enterAnimation, void 0, 'hold')
 
     if (!playback) {
       this.pendingAction = void 0
@@ -1133,6 +1178,7 @@ export class PetBehaviorController {
       }
 
       this.setState('pet-idle')
+      this.playSteadyAnimation()
       // interval 表示“宠物安静多久后再动作”，所以必须从进入完成后的可见 idle 帧重新计时。
       this.restartIntervalDelays()
 
@@ -1271,23 +1317,35 @@ export class PetBehaviorController {
     this.clearPassiveTimers()
     this.clearSpeech()
 
-    if (!request.action.animation) {
-      // 对话动作也要重播 pet idle 来中断旧动作；只推进 generation 会让旧雪碧继续留在画面上。
-      const playback = this.beginPlayback(config.idleAnimation, config.idleAnimation)
+    // 动画和对白必须读取同一份启动快照；stateEffect 随后即使改变形态，本次动作仍使用
+    // “来源形态”的完整雪碧图与语气，不会拼成普通动作配心魔台词之类的错位组合。
+    const actionStateValues = this.characterState.evaluate(
+      this.characterStateContext('pet'),
+    ).snapshot.values
+    const actionAnimation = this.resolveActionAnimation(request.action, actionStateValues)
+    const actionDialogue = this.resolveActionDialogue(request.action, actionStateValues)
+
+    if (!actionAnimation) {
+      // 对话动作仍需启动当前状态常态来中断旧动作，但不能硬编码回 pet-idle。
+      const steadyAnimation = this.resolveSteadyAnimation('pet')
+      const playback = steadyAnimation
+        ? this.beginPlayback(steadyAnimation, steadyAnimation)
+        : null
       const generation = playback?.generation ?? this.playbackGeneration
 
       // loop idle 只会在下一次播放时以 interrupted 结算，此句柄不参与动作完成判定。
       void playback?.handle.finished.catch(() => void 0)
 
       this.commitActionStart(request)
-      this.showActionDialogue(request.action, generation)
+      this.showActionDialogue(actionDialogue, generation)
       this.playActionAudio(request.action, generation)
-      this.scheduleDialogueOnlyCompletion(request.action, generation)
+      this.scheduleDialogueOnlyCompletion(actionDialogue, generation)
 
       return true
     }
 
-    const playback = this.beginPlayback(request.action.animation, config.idleAnimation)
+    // one-shot 末帧保持到完成回调，避免 Sprite 先回旧常态再由状态机改成新常态。
+    const playback = this.beginPlayback(actionAnimation, void 0, 'hold')
 
     if (!playback) {
       this.finishCurrentAction(false)
@@ -1296,7 +1354,7 @@ export class PetBehaviorController {
     }
 
     this.commitActionStart(request)
-    this.showActionDialogue(request.action, playback.generation)
+    this.showActionDialogue(actionDialogue, playback.generation)
     this.playActionAudio(request.action, playback.generation)
     this.finishPetPlayback(playback)
 
@@ -1342,6 +1400,7 @@ export class PetBehaviorController {
           moduleId: PET_LEGACY_MODULE_ID,
           label: action.label,
           animation: action.animation,
+          stateAnimations: action.stateAnimations,
           priority: 0,
           cooldownMs: action.cooldownMs ?? 0,
           interruptible: true,
@@ -1367,6 +1426,7 @@ export class PetBehaviorController {
         moduleId: PET_LEGACY_MODULE_ID,
         label: interaction.label,
         animation: interaction.animation,
+        stateAnimations: interaction.stateAnimations,
         priority: 0,
         cooldownMs: interaction.cooldownMs ?? 0,
         interruptible: true,
@@ -1445,6 +1505,7 @@ export class PetBehaviorController {
     }
 
     this.scheduleScheduleScan()
+    this.scheduleStateEvaluation()
 
     if (this.currentState === 'work-idle') this.scheduleActivation()
     else this.clearActivationTimer()
@@ -1537,7 +1598,7 @@ export class PetBehaviorController {
   private enqueuePassiveOccurrence(occurrence: QueuedPassiveOccurrence, drain = true) {
     if (!this.moduleActions.has(occurrence.actionId)
       || this.clock.now() < (this.cooldowns.get(occurrence.actionId) ?? 0)
-      || this.activePetAction?.actionId === occurrence.actionId
+      || this.activePetAction?.action.id === occurrence.actionId
       || this.pendingAction?.action.id === occurrence.actionId) {
       return false
     }
@@ -1804,7 +1865,7 @@ export class PetBehaviorController {
   }
 
   private canQueuePendingAction(request: PetActionRequest) {
-    if (this.activePetAction?.actionId === request.action.id) return false
+    if (this.activePetAction?.action.id === request.action.id) return false
     if (this.pendingAction?.action.id === request.action.id) return false
 
     return !this.pendingAction || request.priority > this.pendingAction.priority
@@ -1825,7 +1886,7 @@ export class PetBehaviorController {
     return Boolean(
       active
       && active.interruptible
-      && active.actionId !== request.action.id
+      && active.action.id !== request.action.id
       && request.priority > active.priority,
     )
   }
@@ -1836,19 +1897,30 @@ export class PetBehaviorController {
     // 显式操作可以随时重播，但仍记录冷却，避免它刚结束就被被动触发器再次选中。
     this.cooldowns.set(request.action.id, now + request.action.cooldownMs)
     this.activePetAction = {
-      actionId: request.action.id,
+      action: request.action,
       source: request.source,
       priority: request.priority,
       interruptible: request.action.interruptible,
     }
-
     this.setState(request.source === 'pointer' ? 'pet-interaction' : 'pet-action')
+
+    // 先切换播放阶段再更新语义状态，防止 pet-idle 的即时重绘打断刚启动的一次性动作。
+    if (request.source === 'manual' || request.source === 'pointer') {
+      this.markSemanticInteraction()
+    }
+    if (request.action.stateEffect?.when === 'started') {
+      this.applyCharacterStateEffect(request.action.stateEffect)
+    }
   }
 
   private finishCurrentAction(success: boolean) {
     const activeAction = this.activePetAction
 
     this.activePetAction = void 0
+
+    if (success && activeAction?.action.stateEffect?.when === 'finished') {
+      this.applyCharacterStateEffect(activeAction.action.stateEffect)
+    }
 
     // 驱动异常不应留下与 idle 画面脱节的旧对白；正常结束则允许气泡按自身时长淡出。
     if (!success) this.clearSpeech()
@@ -1866,6 +1938,7 @@ export class PetBehaviorController {
           // 输入监听尚未授权时无法运行被动调度，但主动菜单仍应落到可再次点击的 pet-idle。
           // 否则每次动作后都会额外播放 exit，下一次点击又被 enter/exit 生命周期延迟。
           this.setState('pet-idle')
+          this.playSteadyAnimation()
         }
 
         return
@@ -1878,6 +1951,7 @@ export class PetBehaviorController {
     }
 
     this.setState('pet-idle')
+    this.playSteadyAnimation()
     // 动作播放耗时不属于 interval 的安静等待期；完成后所有 interval 都从完整 delay 重新竞争。
     this.restartIntervalDelays()
 
@@ -1920,9 +1994,7 @@ export class PetBehaviorController {
     return accepted
   }
 
-  private showActionDialogue(action: PetRuntimeAction, generation: number) {
-    const dialogue = action.dialogue
-
+  private showActionDialogue(dialogue: PetRuntimeDialogue | undefined, generation: number) {
     if (!dialogue || !this.driver.speak || this.nextRandom() >= dialogue.chance) return
 
     const line = this.selectWeighted(dialogue.lines)
@@ -1991,10 +2063,13 @@ export class PetBehaviorController {
     this.audioDelayTimer = delayTimer
   }
 
-  private scheduleDialogueOnlyCompletion(action: PetRuntimeAction, generation: number) {
+  private scheduleDialogueOnlyCompletion(
+    dialogue: PetRuntimeDialogue | undefined,
+    generation: number,
+  ) {
     // 没有动画的动作仍要占据一次完整对白周期，否则同帧就回 idle，会让队列并发覆盖气泡。
-    const duration = action.dialogue
-      ? Math.max(1, action.dialogue.delayMs + action.dialogue.durationMs)
+    const duration = dialogue
+      ? Math.max(1, dialogue.delayMs + dialogue.durationMs)
       : 1
     const timer = this.clock.setTimeout(() => {
       if (this.dialogueOnlyTimer !== timer || generation !== this.playbackGeneration) return
@@ -2068,10 +2143,14 @@ export class PetBehaviorController {
     }
   }
 
-  private beginPlayback(animation: string, returnTo?: string): ActivePlayback | null {
+  private beginPlayback(
+    animation: string,
+    returnTo?: string,
+    completion: PetPlayOptions['completion'] = 'return',
+  ): ActivePlayback | null {
     // 每次播放先推进代次，因此旧 finished 即使晚到也无法驱动当前状态机。
     const generation = ++this.playbackGeneration
-    const handle = this.driver.play(animation, { returnTo })
+    const handle = this.driver.play(animation, { returnTo, completion })
 
     if (!handle) return null
 
@@ -2094,6 +2173,152 @@ export class PetBehaviorController {
   private wallNow() {
     // 旧测试时钟没有 wallNow 时回退到 now，使注入的单一虚拟时间仍能完全控制行为。
     return this.clock.wallNow?.() ?? this.clock.now()
+  }
+
+  private characterStateContext(scene = this.characterStateScene()): PetCharacterStateContext {
+    const now = this.clock.now()
+
+    return {
+      scene,
+      now,
+      wallNow: this.wallNow(),
+      idleForMs: Math.max(0, now - this.semanticIdleStartedAt),
+    }
+  }
+
+  private characterStateScene(): PetStateScene {
+    // entering/action 都已经在宠物画布语义内；只有工作态和退出过渡按 work profile 解析。
+    return this.currentState === 'work-idle' || this.currentState === 'pet-exiting'
+      ? 'work'
+      : 'pet'
+  }
+
+  private resolveSteadyAnimation(scene: PetStateScene) {
+    const evaluation = this.characterState.evaluate(this.characterStateContext(scene))
+
+    return evaluation.profile?.animation
+      ?? (scene === 'pet' ? this.behaviorConfig?.idleAnimation : this.defaultAnimation)
+  }
+
+  private resolveActionAnimation(
+    action: PetRuntimeAction,
+    values: Readonly<Record<string, string>>,
+  ) {
+    const selected = this.selectActionStateVariant(action.stateAnimations, values)
+
+    return selected?.animation ?? action.animation
+  }
+
+  private resolveActionDialogue(
+    action: PetRuntimeAction,
+    values: Readonly<Record<string, string>>,
+  ) {
+    const selected = this.selectActionStateVariant(action.stateDialogues, values)
+
+    return selected?.dialogue ?? action.dialogue
+  }
+
+  private selectActionStateVariant<T extends {
+    priority: number
+    match: Record<string, string>
+  }>(
+    variants: T[] | undefined,
+    values: Readonly<Record<string, string>>,
+  ) {
+    if (!variants?.length) return undefined
+
+    // priority 是模型作者的显式覆盖顺序；同优先级时，更具体的多维匹配优先，
+    // 最后保留配置顺序；动画和对白共用这套选择器，保证相同 match 得到一致结果。
+    return variants
+      .map((variant, index) => ({ variant, index }))
+      .filter(({ variant }) => {
+        return Object.entries(variant.match).every(([dimension, expected]) => {
+          return values[dimension] === expected
+        })
+      })
+      .sort((left, right) => {
+        return right.variant.priority - left.variant.priority
+          || Object.keys(right.variant.match).length - Object.keys(left.variant.match).length
+          || left.index - right.index
+      })
+      .at(0)
+      ?.variant
+  }
+
+  private playSteadyAnimation() {
+    const animation = this.resolveSteadyAnimation('pet')
+
+    if (!animation) return false
+
+    const playback = this.beginPlayback(animation, animation)
+
+    if (!playback) return false
+
+    this.steadyAnimation = animation
+
+    // 循环常态只会被下一次播放中断；不等待其 finished，状态计时器负责后续切换。
+    void playback?.handle.finished.catch(() => void 0)
+    this.scheduleStateEvaluation()
+
+    return playback !== null
+  }
+
+  private markSemanticInteraction(renderSteady = true) {
+    this.semanticIdleStartedAt = this.clock.now()
+    const evaluation = this.characterState.clearUntilInput(this.characterStateContext())
+
+    if (renderSteady && evaluation.changed && this.currentState === 'pet-idle') {
+      this.playSteadyAnimationIfChanged(evaluation.profile?.animation)
+    }
+
+    this.scheduleStateEvaluation()
+  }
+
+  private applyCharacterStateEffect(effect: PetStateEffectConfig) {
+    const evaluation = this.characterState.applyEffect(effect, this.characterStateContext('pet'))
+
+    // 动作播放中只更新语义快照，画面在动作完成后一次性回到新 profile。
+    if (evaluation.changed && this.currentState === 'pet-idle') {
+      this.playSteadyAnimationIfChanged(evaluation.profile?.animation)
+    }
+
+    this.scheduleStateEvaluation()
+  }
+
+  private playSteadyAnimationIfChanged(profileAnimation?: string) {
+    const animation = profileAnimation ?? this.behaviorConfig?.idleAnimation
+
+    if (!animation || animation === this.steadyAnimation) return
+
+    this.playSteadyAnimation()
+  }
+
+  private scheduleStateEvaluation() {
+    this.clearStateEvaluationTimer()
+
+    if (!this.started || this.destroyed || !this.behaviorConfig || this.menuPaused) return
+
+    const context = this.characterStateContext()
+    const delay = this.characterState.nextEvaluationDelay(context)
+
+    if (delay === undefined) return
+
+    const generation = this.lifecycleGeneration
+    const timer = this.clock.setTimeout(() => {
+      if (this.stateEvaluationTimer !== timer || generation !== this.lifecycleGeneration) return
+
+      this.stateEvaluationTimer = void 0
+      const evaluation = this.characterState.evaluate(this.characterStateContext())
+
+      if (evaluation.changed && this.currentState === 'pet-idle') {
+        this.playSteadyAnimationIfChanged(evaluation.profile?.animation)
+      }
+
+      // 状态值可能变化但仍命中同一 profile（例如 happy 覆盖 relaxed）；仍要继续等待下一截止点。
+      this.scheduleStateEvaluation()
+    }, Math.max(1, delay))
+
+    this.stateEvaluationTimer = timer
   }
 
   private setState(state: PetBehaviorState) {
@@ -2121,6 +2346,15 @@ export class PetBehaviorController {
     this.clearActivationTimer()
     this.clearPassiveTimers()
     this.clearScheduleTimer()
+    this.clearStateEvaluationTimer()
+  }
+
+  private clearStateEvaluationTimer() {
+    if (this.stateEvaluationTimer !== void 0) {
+      this.clock.clearTimeout(this.stateEvaluationTimer)
+    }
+
+    this.stateEvaluationTimer = void 0
   }
 
   private clearActivationTimer() {
@@ -2175,6 +2409,7 @@ export function assertPetBehaviorConfig(
   // idle 必须循环，进入/退出和动作必须结束，控制器才能可靠收到完成信号推进状态。
   assertAnimation(value.idleAnimation, true, context, 'Pet behavior idleAnimation')
   assertAnimation(value.exitAnimation, false, context, 'Pet behavior exitAnimation')
+  assertPetStateMachineConfig(value.stateMachine, context)
 
   // 自主动作和交互共用 cooldown Map，ID 也必须共用一个命名空间，避免互相覆盖冷却时间。
   const ids = new Set<string>()
@@ -2212,6 +2447,12 @@ export function assertPetBehaviorConfig(
       if (action.label !== void 0) assertLocalizedText(action.label, `${label}.label`)
       assertNonEmptyString(action.animation, `${label}.animation`)
       assertAnimation(action.animation, false, context, `${label}.animation`)
+      assertPetStateAnimations(
+        action.stateAnimations,
+        value.stateMachine,
+        context,
+        `${label}.stateAnimations`,
+      )
       assertPositiveNumber(action.weight, `${label}.weight`)
 
       if (action.cooldownMs !== void 0) {
@@ -2279,6 +2520,12 @@ export function assertPetBehaviorConfig(
       semanticBindings.add(semanticBinding)
       assertNonEmptyString(interaction.animation, `${label}.animation`)
       assertAnimation(interaction.animation, false, context, `${label}.animation`)
+      assertPetStateAnimations(
+        interaction.stateAnimations,
+        value.stateMachine,
+        context,
+        `${label}.stateAnimations`,
+      )
 
       if (interaction.cooldownMs !== void 0) {
         assertNonNegativeTimerDelay(interaction.cooldownMs, `${label}.cooldownMs`)
@@ -2349,6 +2596,8 @@ export function assertPetBehaviorConfig(
       semanticBindings,
       legacyActionCount,
       legacyTriggerCount,
+      value.stateMachine,
+      context,
     )
   }
 }
@@ -2358,6 +2607,8 @@ function assertRuntimeModuleGraph(
   semanticBindings: Set<string>,
   initialActionCount: number,
   initialTriggerCount: number,
+  stateMachine: PetStateMachineConfig | undefined,
+  context: PetBehaviorValidationContext,
 ) {
   if (!Array.isArray(value)) throw new TypeError('Pet behavior modules must be an array')
 
@@ -2387,6 +2638,25 @@ function assertRuntimeModuleGraph(
       )
     }
 
+    for (const action of candidate.actions) {
+      assertRecord(action, `${label}.actions`)
+
+      if (action.stateEffect !== undefined) {
+        assertRuntimeStateEffect(action.stateEffect, stateMachine, `${label}.actions.stateEffect`)
+      }
+      assertPetStateAnimations(
+        action.stateAnimations,
+        stateMachine,
+        context,
+        `${label}.actions.stateAnimations`,
+      )
+      assertPetStateDialogues(
+        action.stateDialogues,
+        stateMachine,
+        `${label}.actions.stateDialogues`,
+      )
+    }
+
     for (const trigger of candidate.triggers) {
       assertRecord(trigger, `${label}.triggers`)
       if (trigger.type !== 'pointer') continue
@@ -2403,6 +2673,348 @@ function assertRuntimeModuleGraph(
       semanticBindings.add(semanticBinding)
     }
   }
+}
+
+function assertPetStateMachineConfig(
+  value: unknown,
+  context: PetBehaviorValidationContext,
+): asserts value is PetStateMachineConfig | undefined {
+  if (value === undefined) return
+
+  assertRecord(value, 'Pet behavior stateMachine')
+  assertAllowedPetStateKeys(value, ['dimensions', 'profiles', 'rules'], 'Pet behavior stateMachine')
+  assertRecord(value.dimensions, 'Pet behavior stateMachine.dimensions')
+
+  const dimensions = Object.entries(value.dimensions)
+
+  if (dimensions.length === 0) {
+    throw new TypeError('Pet behavior stateMachine.dimensions cannot be empty')
+  }
+  if (dimensions.length > PET_MAX_STATE_DIMENSIONS) {
+    throw new RangeError(
+      `Pet behavior stateMachine.dimensions cannot exceed ${PET_MAX_STATE_DIMENSIONS}`,
+    )
+  }
+
+  const allowedValues = new Map<string, Set<string>>()
+
+  for (const [dimension, rawDimension] of dimensions) {
+    const label = `Pet behavior stateMachine.dimensions.${dimension}`
+
+    assertPetStateId(dimension, 'Pet behavior stateMachine dimension id')
+    assertRecord(rawDimension, label)
+    assertAllowedPetStateKeys(rawDimension, ['initial', 'values'], label)
+    const initial = assertPetStateId(rawDimension.initial, `${label}.initial`)
+
+    if (!Array.isArray(rawDimension.values) || rawDimension.values.length === 0) {
+      throw new TypeError(`${label}.values must be a non-empty array`)
+    }
+    if (rawDimension.values.length > PET_MAX_STATE_VALUES_PER_DIMENSION) {
+      throw new RangeError(
+        `${label}.values cannot exceed ${PET_MAX_STATE_VALUES_PER_DIMENSION}`,
+      )
+    }
+
+    const values = new Set<string>()
+
+    for (const [index, stateValue] of rawDimension.values.entries()) {
+      const normalizedStateValue = assertPetStateId(stateValue, `${label}.values[${index}]`)
+      if (values.has(normalizedStateValue)) throw new TypeError(`${label}.values must be unique`)
+
+      values.add(normalizedStateValue)
+    }
+
+    if (!values.has(initial)) {
+      throw new TypeError(`${label}.initial must appear in values`)
+    }
+
+    allowedValues.set(dimension, values)
+  }
+
+  if (!Array.isArray(value.profiles) || value.profiles.length === 0) {
+    throw new TypeError('Pet behavior stateMachine.profiles must be a non-empty array')
+  }
+  if (value.profiles.length > PET_MAX_STATE_PROFILES) {
+    throw new RangeError(
+      `Pet behavior stateMachine.profiles cannot exceed ${PET_MAX_STATE_PROFILES}`,
+    )
+  }
+
+  const profileIds = new Set<string>()
+  let hasPetFallback = false
+
+  for (const [index, profile] of value.profiles.entries()) {
+    const label = `Pet behavior stateMachine.profiles[${index}]`
+
+    assertRecord(profile, label)
+    assertAllowedPetStateKeys(
+      profile,
+      ['id', 'priority', 'scene', 'match', 'animation'],
+      label,
+    )
+    const id = assertPetStateId(profile.id, `${label}.id`)
+
+    if (profileIds.has(id)) throw new TypeError(`${label}.id must be unique`)
+    profileIds.add(id)
+
+    assertBoundedInteger(profile.priority, 0, 999, `${label}.priority`)
+    assertPetStateScene(profile.scene, `${label}.scene`)
+    assertStateValueMap(profile.match, allowedValues, `${label}.match`, true)
+    assertNonEmptyString(profile.animation, `${label}.animation`)
+    assertAnimation(profile.animation, true, context, `${label}.animation`)
+
+    if (profile.scene === 'pet' && Object.keys(profile.match).length === 0) {
+      hasPetFallback = true
+    }
+  }
+
+  if (!hasPetFallback) {
+    throw new TypeError('Pet behavior stateMachine.profiles must contain a pet fallback profile')
+  }
+
+  if (!Array.isArray(value.rules)) {
+    throw new TypeError('Pet behavior stateMachine.rules must be an array')
+  }
+  if (value.rules.length > PET_MAX_STATE_RULES) {
+    throw new RangeError(`Pet behavior stateMachine.rules cannot exceed ${PET_MAX_STATE_RULES}`)
+  }
+
+  const ruleIds = new Set<string>()
+
+  for (const [index, rule] of value.rules.entries()) {
+    const label = `Pet behavior stateMachine.rules[${index}]`
+
+    assertRecord(rule, label)
+    assertAllowedPetStateKeys(rule, ['id', 'priority', 'when', 'set'], label)
+    const id = assertPetStateId(rule.id, `${label}.id`)
+
+    if (ruleIds.has(id)) throw new TypeError(`${label}.id must be unique`)
+    ruleIds.add(id)
+
+    assertBoundedInteger(rule.priority, 0, 999, `${label}.priority`)
+    assertRecord(rule.when, `${label}.when`)
+    assertAllowedPetStateKeys(
+      rule.when,
+      ['scene', 'idleForMs', 'dailyWindow'],
+      `${label}.when`,
+    )
+
+    if (rule.when.scene !== undefined) {
+      assertPetStateScene(rule.when.scene, `${label}.when.scene`)
+    }
+    if (rule.when.idleForMs !== undefined) {
+      assertNonNegativeTimerDelay(rule.when.idleForMs, `${label}.when.idleForMs`)
+    }
+    if (rule.when.dailyWindow !== undefined) {
+      assertPetStateDailyWindow(rule.when.dailyWindow, `${label}.when.dailyWindow`)
+    }
+    if (Object.keys(rule.when).length === 0) {
+      throw new TypeError(`${label}.when cannot be empty`)
+    }
+
+    assertStateValueMap(rule.set, allowedValues, `${label}.set`, false)
+  }
+}
+
+function assertRuntimeStateEffect(
+  value: unknown,
+  stateMachine: PetStateMachineConfig | undefined,
+  label: string,
+): asserts value is PetStateEffectConfig {
+  if (!stateMachine) throw new TypeError(`${label} requires Pet behavior stateMachine`)
+
+  assertRecord(value, label)
+  assertStateValueMap(
+    value.set,
+    new Map(Object.entries(stateMachine.dimensions).map(([dimension, config]) => {
+      return [dimension, new Set(config.values)]
+    })),
+    `${label}.set`,
+    false,
+  )
+}
+
+function assertPetStateAnimations(
+  value: unknown,
+  stateMachine: PetStateMachineConfig | undefined,
+  context: PetBehaviorValidationContext,
+  label: string,
+) {
+  if (value === undefined) return
+  if (!stateMachine) throw new TypeError(`${label} requires Pet behavior stateMachine`)
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty array`)
+  }
+  if (value.length > PET_MAX_STATE_ANIMATION_VARIANTS) {
+    throw new RangeError(
+      `${label} cannot exceed ${PET_MAX_STATE_ANIMATION_VARIANTS} variants`,
+    )
+  }
+
+  const allowedValues = new Map(
+    Object.entries(stateMachine.dimensions).map(([dimension, config]) => {
+      return [dimension, new Set(config.values)]
+    }),
+  )
+
+  for (const [index, variant] of value.entries()) {
+    const variantLabel = `${label}[${index}]`
+
+    assertRecord(variant, variantLabel)
+    assertAllowedPetStateKeys(
+      variant,
+      ['priority', 'match', 'animation'],
+      variantLabel,
+    )
+    assertBoundedInteger(variant.priority, 0, 99, `${variantLabel}.priority`)
+    assertStateValueMap(variant.match, allowedValues, `${variantLabel}.match`, false)
+    assertNonEmptyString(variant.animation, `${variantLabel}.animation`)
+    assertAnimation(variant.animation, false, context, `${variantLabel}.animation`)
+  }
+}
+
+function assertPetStateDialogues(
+  value: unknown,
+  stateMachine: PetStateMachineConfig | undefined,
+  label: string,
+) {
+  if (value === undefined) return
+  if (!stateMachine) throw new TypeError(`${label} requires Pet behavior stateMachine`)
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty array`)
+  }
+  if (value.length > PET_MAX_STATE_DIALOGUE_VARIANTS) {
+    throw new RangeError(
+      `${label} cannot exceed ${PET_MAX_STATE_DIALOGUE_VARIANTS} variants`,
+    )
+  }
+
+  const allowedValues = new Map(
+    Object.entries(stateMachine.dimensions).map(([dimension, config]) => {
+      return [dimension, new Set(config.values)]
+    }),
+  )
+
+  for (const [index, variant] of value.entries()) {
+    const variantLabel = `${label}[${index}]`
+
+    assertRecord(variant, variantLabel)
+    assertAllowedPetStateKeys(variant, ['priority', 'match', 'dialogue'], variantLabel)
+    assertBoundedInteger(variant.priority, 0, 99, `${variantLabel}.priority`)
+    assertStateValueMap(variant.match, allowedValues, `${variantLabel}.match`, false)
+    // 对白内容已由 module loader 规范化；模型级这里只补齐状态维度/value 的交叉校验。
+    assertRecord(variant.dialogue, `${variantLabel}.dialogue`)
+  }
+}
+
+function assertStateValueMap(
+  value: unknown,
+  allowedValues: Map<string, Set<string>>,
+  label: string,
+  allowEmpty: boolean,
+): asserts value is Record<string, string> {
+  assertRecord(value, label)
+  const entries = Object.entries(value)
+
+  if (!allowEmpty && entries.length === 0) throw new TypeError(`${label} cannot be empty`)
+  if (entries.length > PET_MAX_STATE_DIMENSIONS) {
+    throw new RangeError(`${label} cannot exceed ${PET_MAX_STATE_DIMENSIONS} dimensions`)
+  }
+
+  for (const [dimension, stateValue] of entries) {
+    const values = allowedValues.get(dimension)
+
+    if (!values) throw new TypeError(`${label}.${dimension} references an unknown dimension`)
+    const normalizedStateValue = assertPetStateId(stateValue, `${label}.${dimension}`)
+    if (!values.has(normalizedStateValue)) {
+      throw new TypeError(`${label}.${dimension} references an unknown state value`)
+    }
+  }
+}
+
+function assertPetStateDailyWindow(value: unknown, label: string) {
+  assertRecord(value, label)
+  assertAllowedPetStateKeys(value, ['startTime', 'endTime', 'dates', 'weekdays'], label)
+  assertPetStateClockTime(value.startTime, `${label}.startTime`)
+  assertPetStateClockTime(value.endTime, `${label}.endTime`)
+
+  if (value.startTime === value.endTime) {
+    throw new RangeError(`${label}.startTime and endTime cannot be equal`)
+  }
+
+  if (value.dates !== undefined) {
+    if (!Array.isArray(value.dates) || value.dates.length === 0) {
+      throw new TypeError(`${label}.dates must be a non-empty array`)
+    }
+    if (value.dates.length > PET_MAX_STATE_DATES) {
+      throw new RangeError(`${label}.dates cannot exceed ${PET_MAX_STATE_DATES}`)
+    }
+
+    for (const [index, date] of value.dates.entries()) {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new TypeError(`${label}.dates[${index}] must use YYYY-MM-DD`)
+      }
+
+      const parsed = new Date(`${date}T00:00:00`)
+      const normalized = [
+        parsed.getFullYear(),
+        String(parsed.getMonth() + 1).padStart(2, '0'),
+        String(parsed.getDate()).padStart(2, '0'),
+      ].join('-')
+
+      if (Number.isNaN(parsed.getTime()) || normalized !== date) {
+        throw new TypeError(`${label}.dates[${index}] is not a valid local date`)
+      }
+    }
+  }
+
+  if (value.weekdays !== undefined) {
+    if (!Array.isArray(value.weekdays) || value.weekdays.length === 0) {
+      throw new TypeError(`${label}.weekdays must be a non-empty array`)
+    }
+
+    const weekdays = new Set<number>()
+
+    for (const [index, weekday] of value.weekdays.entries()) {
+      const normalized = assertBoundedInteger(weekday, 0, 6, `${label}.weekdays[${index}]`)
+
+      if (weekdays.has(normalized)) throw new TypeError(`${label}.weekdays must be unique`)
+      weekdays.add(normalized)
+    }
+  }
+}
+
+function assertPetStateClockTime(value: unknown, label: string) {
+  if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+    throw new TypeError(`${label} must use HH:mm`)
+  }
+}
+
+function assertPetStateScene(value: unknown, label: string): asserts value is 'work' | 'pet' {
+  if (value !== 'work' && value !== 'pet') {
+    throw new TypeError(`${label} must be work or pet`)
+  }
+}
+
+function assertPetStateId(value: unknown, label: string): string {
+  assertNonEmptyString(value, label)
+
+  if (value.length > 80 || !PET_STATE_ID_PATTERN.test(value)) {
+    throw new TypeError(`${label} contains an invalid id`)
+  }
+
+  return value
+}
+
+function assertAllowedPetStateKeys(
+  value: Record<string, unknown>,
+  keys: string[],
+  label: string,
+) {
+  const allowed = new Set(keys)
+  const unsupported = Object.keys(value).find(key => !allowed.has(key))
+
+  if (unsupported) throw new TypeError(`${label}.${unsupported} is unsupported`)
 }
 
 function assertLocalizedText(value: unknown, label: string): asserts value is PetLocalizedText {
@@ -2586,6 +3198,14 @@ function assertNonNegativeTimerDelay(value: unknown, label: string): asserts val
     || value > PET_MAX_TIMER_DELAY) {
     throw new TypeError(`${label} must be between 0 and ${PET_MAX_TIMER_DELAY}`)
   }
+}
+
+function assertBoundedInteger(value: unknown, minimum: number, maximum: number, label: string) {
+  if (!Number.isInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+    throw new TypeError(`${label} must be an integer between ${minimum} and ${maximum}`)
+  }
+
+  return Number(value)
 }
 
 function assertNonNegativeNumber(value: unknown, label: string): asserts value is number {

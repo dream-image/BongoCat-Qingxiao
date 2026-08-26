@@ -18,7 +18,14 @@
       "columns": 3,
       "fps": 8,
       "loop": true,
-      "frameDurations": [4200, 100, 55, 45, 55, 120]
+      "frameDurations": [
+        4200,
+        100,
+        55,
+        45,
+        55,
+        120
+      ]
     },
     "pluck-01": {
       "file": "sprites/pluck-01.webp",
@@ -28,7 +35,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-02": {
       "file": "sprites/pluck-02.webp",
@@ -38,7 +52,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-03": {
       "file": "sprites/pluck-03.webp",
@@ -48,7 +69,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-04": {
       "file": "sprites/pluck-04.webp",
@@ -58,7 +86,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-05": {
       "file": "sprites/pluck-05.webp",
@@ -68,7 +103,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-06": {
       "file": "sprites/pluck-06.webp",
@@ -78,7 +120,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-07": {
       "file": "sprites/pluck-07.webp",
@@ -88,7 +137,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 90, 90, 90, 90, 30]
+      "frameDurations": [
+        30,
+        90,
+        90,
+        90,
+        90,
+        30
+      ]
     },
     "pluck-08": {
       "file": "sprites/pluck-08.webp",
@@ -98,7 +154,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-09": {
       "file": "sprites/pluck-09.webp",
@@ -108,7 +171,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "pluck-10": {
       "file": "sprites/pluck-10.webp",
@@ -118,7 +188,14 @@
       "columns": 3,
       "fps": 15,
       "loop": false,
-      "frameDurations": [30, 70, 110, 110, 70, 30]
+      "frameDurations": [
+        30,
+        70,
+        110,
+        110,
+        70,
+        30
+      ]
     },
     "transform": {
       "file": "sprites/transform.webp",
@@ -128,7 +205,24 @@
       "columns": 4,
       "fps": 16,
       "loop": false,
-      "frameDurations": [70, 60, 60, 60, 60, 60, 70, 180, 180, 70, 60, 60, 60, 60, 60, 90]
+      "frameDurations": [
+        70,
+        60,
+        60,
+        60,
+        60,
+        60,
+        70,
+        180,
+        180,
+        70,
+        60,
+        60,
+        60,
+        60,
+        60,
+        90
+      ]
     },
     "pet-heart-demon": {
       "file": "sprites/pet-heart-demon.webp",
@@ -138,7 +232,24 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [45, 75, 90, 110, 130, 150, 180, 380, 380, 180, 150, 130, 110, 90, 75, 45]
+      "frameDurations": [
+        45,
+        75,
+        90,
+        110,
+        130,
+        150,
+        180,
+        380,
+        380,
+        180,
+        150,
+        130,
+        110,
+        90,
+        75,
+        45
+      ]
     },
     "pet-enter": {
       "file": "sprites/pet-enter.webp",
@@ -148,7 +259,16 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [100, 120, 140, 160, 190, 190, 160, 140]
+      "frameDurations": [
+        100,
+        120,
+        140,
+        160,
+        190,
+        190,
+        160,
+        140
+      ]
     },
     "pet-idle": {
       "file": "sprites/pet-idle.webp",
@@ -158,7 +278,182 @@
       "columns": 4,
       "fps": 12,
       "loop": true,
-      "frameDurations": [380, 380, 380, 380, 380, 380, 380, 380, 380, 380, 80, 380]
+      "frameDurations": [
+        380,
+        380,
+        380,
+        380,
+        380,
+        380,
+        380,
+        380,
+        380,
+        380,
+        80,
+        380
+      ]
+    },
+    "pet-relaxed": {
+      "file": "sprites/pet-idle.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        650,
+        650,
+        650,
+        650,
+        650,
+        650,
+        650,
+        650,
+        650,
+        650,
+        90,
+        650
+      ]
+    },
+    "pet-drowsy": {
+      "file": "sprites/pet-drowsy.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        900,
+        240,
+        180,
+        500,
+        800,
+        500,
+        180,
+        240
+      ]
+    },
+    "pet-nap": {
+      "file": "sprites/pet-nap.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        900,
+        700,
+        650,
+        650,
+        900,
+        650,
+        650,
+        700
+      ]
+    },
+    "pet-sleep": {
+      "file": "sprites/pet-sleep.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        1200,
+        900,
+        800,
+        800,
+        1200,
+        800,
+        800,
+        900
+      ]
+    },
+    "pet-happy": {
+      "file": "sprites/pet-happy.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        260,
+        260,
+        300,
+        360,
+        420,
+        500,
+        560,
+        500,
+        420,
+        360,
+        300,
+        260
+      ]
+    },
+    "pet-annoyed": {
+      "file": "sprites/pet-annoyed.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 10,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        400,
+        400,
+        450,
+        650,
+        750,
+        750,
+        650,
+        450,
+        400,
+        400
+      ]
+    },
+    "pet-concerned": {
+      "file": "sprites/pet-concerned.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 10,
+      "columns": 4,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        400,
+        400,
+        450,
+        650,
+        750,
+        750,
+        650,
+        450,
+        400,
+        400
+      ]
+    },
+    "pet-demon-idle": {
+      "file": "sprites/pet-demon-idle.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 6,
+      "columns": 3,
+      "fps": 8,
+      "loop": true,
+      "frameDurations": [
+        700,
+        700,
+        700,
+        700,
+        100,
+        700
+      ]
     },
     "pet-exit": {
       "file": "sprites/pet-exit.webp",
@@ -168,7 +463,16 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [140, 160, 190, 190, 160, 140, 120, 100]
+      "frameDurations": [
+        140,
+        160,
+        190,
+        190,
+        160,
+        140,
+        120,
+        100
+      ]
     },
     "pet-doze": {
       "file": "sprites/pet-doze.webp",
@@ -178,7 +482,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [100, 120, 150, 180, 220, 300, 300, 220, 180, 150, 120, 100]
+      "frameDurations": [
+        100,
+        120,
+        150,
+        180,
+        220,
+        300,
+        300,
+        220,
+        180,
+        150,
+        120,
+        100
+      ]
     },
     "pet-dream": {
       "file": "sprites/pet-dream.webp",
@@ -188,7 +505,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [110, 140, 170, 210, 270, 360, 360, 270, 210, 170, 140, 110]
+      "frameDurations": [
+        110,
+        140,
+        170,
+        210,
+        270,
+        360,
+        360,
+        270,
+        210,
+        170,
+        140,
+        110
+      ]
     },
     "pet-chime": {
       "file": "sprites/pet-chime.webp",
@@ -198,7 +528,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
     },
     "pet-curious": {
       "file": "sprites/pet-curious.webp",
@@ -208,7 +551,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
     },
     "pet-content": {
       "file": "sprites/pet-content.webp",
@@ -218,7 +574,419 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [90, 110, 130, 150, 180, 260, 260, 180, 150, 130, 110, 90]
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-attack-idle": {
+      "file": "sprites/pet-attack-idle.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 6,
+      "columns": 3,
+      "fps": 12,
+      "loop": true,
+      "frameDurations": [
+        700,
+        700,
+        700,
+        700,
+        100,
+        700
+      ]
+    },
+    "pet-attack-content": {
+      "file": "sprites/pet-attack-content.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-demon-content": {
+      "file": "sprites/pet-demon-content.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-attack-chime": {
+      "file": "sprites/pet-attack-chime.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-demon-chime": {
+      "file": "sprites/pet-demon-chime.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-attack-doze": {
+      "file": "sprites/pet-attack-doze.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        100,
+        120,
+        150,
+        180,
+        220,
+        300,
+        300,
+        220,
+        180,
+        150,
+        120,
+        100
+      ]
+    },
+    "pet-demon-doze": {
+      "file": "sprites/pet-demon-doze.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        100,
+        120,
+        150,
+        180,
+        220,
+        300,
+        300,
+        220,
+        180,
+        150,
+        120,
+        100
+      ]
+    },
+    "pet-attack-dream": {
+      "file": "sprites/pet-attack-dream.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        110,
+        140,
+        170,
+        210,
+        270,
+        360,
+        360,
+        270,
+        210,
+        170,
+        140,
+        110
+      ]
+    },
+    "pet-demon-dream": {
+      "file": "sprites/pet-demon-dream.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        110,
+        140,
+        170,
+        210,
+        270,
+        360,
+        360,
+        270,
+        210,
+        170,
+        140,
+        110
+      ]
+    },
+    "pet-attack-curious": {
+      "file": "sprites/pet-attack-curious.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-demon-curious": {
+      "file": "sprites/pet-demon-curious.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        110,
+        130,
+        150,
+        180,
+        260,
+        260,
+        180,
+        150,
+        130,
+        110,
+        90
+      ]
+    },
+    "pet-normal-to-attack": {
+      "file": "sprites/pet-normal-to-attack.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-demon-to-attack": {
+      "file": "sprites/pet-demon-to-attack.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-attack-flourish": {
+      "file": "sprites/pet-attack-flourish.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-normal-to-demon": {
+      "file": "sprites/pet-normal-to-demon.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-attack-to-demon": {
+      "file": "sprites/pet-attack-to-demon.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-demon-flourish": {
+      "file": "sprites/pet-demon-flourish.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-attack-to-normal": {
+      "file": "sprites/pet-attack-to-normal.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
+    },
+    "pet-demon-to-normal": {
+      "file": "sprites/pet-demon-to-normal.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 8,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        90,
+        110,
+        140,
+        140,
+        110,
+        90,
+        80
+      ]
     }
   },
   "behaviors": {
@@ -227,6 +995,188 @@
       "enterAnimation": "pet-enter",
       "idleAnimation": "pet-idle",
       "exitAnimation": "pet-exit",
+      "stateMachine": {
+        "dimensions": {
+          "activity": {
+            "initial": "awake",
+            "values": [
+              "awake",
+              "relaxed",
+              "drowsy",
+              "napping",
+              "sleeping"
+            ]
+          },
+          "mood": {
+            "initial": "calm",
+            "values": [
+              "calm",
+              "happy",
+              "annoyed",
+              "concerned"
+            ]
+          },
+          "form": {
+            "initial": "normal",
+            "values": [
+              "normal",
+              "attack",
+              "demon"
+            ]
+          }
+        },
+        "profiles": [
+          {
+            "id": "work-awake",
+            "priority": 0,
+            "scene": "work",
+            "match": {},
+            "animation": "idle"
+          },
+          {
+            "id": "demon-form",
+            "priority": 500,
+            "scene": "pet",
+            "match": {
+              "form": "demon"
+            },
+            "animation": "pet-demon-idle"
+          },
+          {
+            "id": "attack-form",
+            "priority": 490,
+            "scene": "pet",
+            "match": {
+              "form": "attack"
+            },
+            "animation": "pet-attack-idle"
+          },
+          {
+            "id": "annoyed-mood",
+            "priority": 400,
+            "scene": "pet",
+            "match": {
+              "mood": "annoyed"
+            },
+            "animation": "pet-annoyed"
+          },
+          {
+            "id": "concerned-mood",
+            "priority": 390,
+            "scene": "pet",
+            "match": {
+              "mood": "concerned"
+            },
+            "animation": "pet-concerned"
+          },
+          {
+            "id": "happy-mood",
+            "priority": 380,
+            "scene": "pet",
+            "match": {
+              "mood": "happy"
+            },
+            "animation": "pet-happy"
+          },
+          {
+            "id": "night-sleep",
+            "priority": 300,
+            "scene": "pet",
+            "match": {
+              "activity": "sleeping"
+            },
+            "animation": "pet-sleep"
+          },
+          {
+            "id": "midday-nap",
+            "priority": 290,
+            "scene": "pet",
+            "match": {
+              "activity": "napping"
+            },
+            "animation": "pet-nap"
+          },
+          {
+            "id": "drowsy",
+            "priority": 280,
+            "scene": "pet",
+            "match": {
+              "activity": "drowsy"
+            },
+            "animation": "pet-drowsy"
+          },
+          {
+            "id": "relaxed",
+            "priority": 270,
+            "scene": "pet",
+            "match": {
+              "activity": "relaxed"
+            },
+            "animation": "pet-relaxed"
+          },
+          {
+            "id": "pet-awake",
+            "priority": 0,
+            "scene": "pet",
+            "match": {},
+            "animation": "pet-idle"
+          }
+        ],
+        "rules": [
+          {
+            "id": "relax-after-two-minutes",
+            "priority": 10,
+            "when": {
+              "scene": "pet",
+              "idleForMs": 120000
+            },
+            "set": {
+              "activity": "relaxed"
+            }
+          },
+          {
+            "id": "drowsy-after-ten-minutes",
+            "priority": 20,
+            "when": {
+              "scene": "pet",
+              "idleForMs": 600000
+            },
+            "set": {
+              "activity": "drowsy"
+            }
+          },
+          {
+            "id": "midday-nap-window",
+            "priority": 40,
+            "when": {
+              "scene": "pet",
+              "idleForMs": 180000,
+              "dailyWindow": {
+                "startTime": "12:00",
+                "endTime": "13:30"
+              }
+            },
+            "set": {
+              "activity": "napping"
+            }
+          },
+          {
+            "id": "night-sleep-window",
+            "priority": 50,
+            "when": {
+              "scene": "pet",
+              "idleForMs": 300000,
+              "dailyWindow": {
+                "startTime": "23:00",
+                "endTime": "06:30"
+              }
+            },
+            "set": {
+              "activity": "sleeping"
+            }
+          }
+        ]
+      },
       "modules": [
         {
           "source": "modules/lively/module.json",
@@ -252,13 +1202,34 @@
         "qin": {
           "shape": "polygon",
           "points": [
-            { "x": 48, "y": 338 },
-            { "x": 392, "y": 342 },
-            { "x": 464, "y": 380 },
-            { "x": 464, "y": 418 },
-            { "x": 391, "y": 430 },
-            { "x": 72, "y": 402 },
-            { "x": 48, "y": 377 }
+            {
+              "x": 48,
+              "y": 338
+            },
+            {
+              "x": 392,
+              "y": 342
+            },
+            {
+              "x": 464,
+              "y": 380
+            },
+            {
+              "x": 464,
+              "y": 418
+            },
+            {
+              "x": 391,
+              "y": 430
+            },
+            {
+              "x": 72,
+              "y": 402
+            },
+            {
+              "x": 48,
+              "y": 377
+            }
           ]
         }
       },
@@ -273,7 +1244,23 @@
           "area": "head",
           "animation": "pet-curious",
           "holdMs": 700,
-          "cooldownMs": 4500
+          "cooldownMs": 4500,
+          "stateAnimations": [
+            {
+              "priority": 90,
+              "match": {
+                "form": "attack"
+              },
+              "animation": "pet-attack-curious"
+            },
+            {
+              "priority": 90,
+              "match": {
+                "form": "demon"
+              },
+              "animation": "pet-demon-curious"
+            }
+          ]
         },
         {
           "id": "qingxiao-head-tap",
@@ -286,7 +1273,23 @@
           "animation": "pet-content",
           "distance": 6,
           "windowMs": 420,
-          "cooldownMs": 1800
+          "cooldownMs": 1800,
+          "stateAnimations": [
+            {
+              "priority": 90,
+              "match": {
+                "form": "attack"
+              },
+              "animation": "pet-attack-content"
+            },
+            {
+              "priority": 90,
+              "match": {
+                "form": "demon"
+              },
+              "animation": "pet-demon-content"
+            }
+          ]
         },
         {
           "id": "qingxiao-head-stroke",
@@ -299,7 +1302,23 @@
           "animation": "pet-content",
           "distance": 72,
           "windowMs": 1200,
-          "cooldownMs": 2200
+          "cooldownMs": 2200,
+          "stateAnimations": [
+            {
+              "priority": 90,
+              "match": {
+                "form": "attack"
+              },
+              "animation": "pet-attack-content"
+            },
+            {
+              "priority": 90,
+              "match": {
+                "form": "demon"
+              },
+              "animation": "pet-demon-content"
+            }
+          ]
         },
         {
           "id": "qingxiao-qin-tap",
@@ -312,7 +1331,23 @@
           "animation": "pet-chime",
           "distance": 6,
           "windowMs": 420,
-          "cooldownMs": 1400
+          "cooldownMs": 1400,
+          "stateAnimations": [
+            {
+              "priority": 90,
+              "match": {
+                "form": "attack"
+              },
+              "animation": "pet-attack-chime"
+            },
+            {
+              "priority": 90,
+              "match": {
+                "form": "demon"
+              },
+              "animation": "pet-demon-chime"
+            }
+          ]
         },
         {
           "id": "qingxiao-qin-stroke",
@@ -325,7 +1360,23 @@
           "animation": "pet-chime",
           "distance": 68,
           "windowMs": 1100,
-          "cooldownMs": 1000
+          "cooldownMs": 1000,
+          "stateAnimations": [
+            {
+              "priority": 90,
+              "match": {
+                "form": "attack"
+              },
+              "animation": "pet-attack-chime"
+            },
+            {
+              "priority": 90,
+              "match": {
+                "form": "demon"
+              },
+              "animation": "pet-demon-chime"
+            }
+          ]
         }
       ]
     }

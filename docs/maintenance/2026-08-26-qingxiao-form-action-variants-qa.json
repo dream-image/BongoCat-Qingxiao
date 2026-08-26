@@ -1,0 +1,869 @@
+{
+  "model": "/Users/thousanddream/code/BongoCat/src-tauri/assets/models/qingxiao",
+  "animations": {
+    "pet-attack-idle": {
+      "output": "sprites/pet-attack-idle.webp",
+      "frames": 6,
+      "columns": 3,
+      "decodedSize": [
+        1536,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 2,
+      "sha256": "c319c12868a2f6734de56e287557f01ff6db61d8232bde87f3848611390ef75d"
+    },
+    "pet-demon-idle": {
+      "output": "sprites/pet-demon-idle.webp",
+      "frames": 6,
+      "columns": 3,
+      "decodedSize": [
+        1536,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 2,
+      "sha256": "2e43e0928a375a34e5c2c72374d1fdf934739d8f12bb9a0aa28a32c547187427"
+    },
+    "attack/pet-content": {
+      "output": "sprites/pet-attack-content.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "fb3a29213a8a581306adcddbccc55568e1bbd21c3f61bf982368ec4fb3e03426"
+    },
+    "demon/pet-content": {
+      "output": "sprites/pet-demon-content.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "d3f6fb28ced3c6173065362ea654984494463e5574572e40aa039384dea1f1a8"
+    },
+    "attack/pet-chime": {
+      "output": "sprites/pet-attack-chime.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "a8e615b90975ffd5c95b47a1d01f29c2abdd79e7a708d9799e9ae50948cceacc"
+    },
+    "demon/pet-chime": {
+      "output": "sprites/pet-demon-chime.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "2dad7bf5083ad7a8bcef967ec38c960921b93447171f3ef6852c87bd1e736272"
+    },
+    "attack/pet-doze": {
+      "output": "sprites/pet-attack-doze.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "67d8ac5f2365fe9697302ba2e7661c9183cee73c589917bdc51d7d79ef0c7227"
+    },
+    "demon/pet-doze": {
+      "output": "sprites/pet-demon-doze.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "f1c200bc46086d6f4c7df976fabbdb40e982d478afce630f56ffe6a826358b30"
+    },
+    "attack/pet-dream": {
+      "output": "sprites/pet-attack-dream.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "857047b7866c9bab056ee243800eff1e4572dbd62026b0e432df29fd3a876890"
+    },
+    "demon/pet-dream": {
+      "output": "sprites/pet-demon-dream.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "8801a0374b42f127d27bb45631f7aec70dec88395eb5b8e8fb01a8df9d0c3196"
+    },
+    "attack/pet-curious": {
+      "output": "sprites/pet-attack-curious.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "0894f19dd10766f8f61c49a37e813b54dd88e0dda40d81c33bb35662b0594359"
+    },
+    "demon/pet-curious": {
+      "output": "sprites/pet-demon-curious.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "59f7c8c12883c419e0d740415220ba9b435f81d0791a5598f63236059bcdbc8c"
+    },
+    "attack/lively/startled": {
+      "output": "modules/lively/sprites/pet-attack-startled.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "329601f1df814261f8c34146db7fd1fd6742cf917741e00cac97e2959d791d48"
+    },
+    "demon/lively/startled": {
+      "output": "modules/lively/sprites/pet-demon-startled.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "0217720e8d89bdf0ffd783f8c42e34b929373f0bd125d5d8439250592b6abbea"
+    },
+    "attack/lively/summon-orb": {
+      "output": "modules/lively/sprites/pet-attack-summon-orb.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "d740280c46f6c72f4dfe4be8f5e05251ba99b073370e7ae21c4b60dbfc217cfc"
+    },
+    "demon/lively/summon-orb": {
+      "output": "modules/lively/sprites/pet-demon-summon-orb.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "445155fa81a6b68f6c0dadfb13afcb2ce5668d74a9a6932741a6408395a62313"
+    },
+    "attack/lively/sword-qi-focus": {
+      "output": "modules/lively/sprites/pet-attack-sword-qi-focus.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "4726d36ebf3cd938cf268e0b5db92144545af7dc39b0f3622b9093b572b0834c"
+    },
+    "demon/lively/sword-qi-focus": {
+      "output": "modules/lively/sprites/pet-demon-sword-qi-focus.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "25d2ed7467ba681b8c17c0dd8ef3718dedf23d9e2787eee706f984ddf942bf0f"
+    },
+    "attack/lively/glissando": {
+      "output": "modules/lively/sprites/pet-attack-glissando.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "3ded20cf76c0214962d2301d31f6b65ed36bdecef3d7f2a7dd1e1e8b78bcb054"
+    },
+    "demon/lively/glissando": {
+      "output": "modules/lively/sprites/pet-demon-glissando.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "28057831c584eead97a147993746797a6d23039b85e51437adb25e38c3660e49"
+    },
+    "attack/lively/wink-wave": {
+      "output": "modules/lively/sprites/pet-attack-wink-wave.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "0be1fbf1e4da355bd96f8f729e310717be6df655481b0ef79def60f7e1ec6ddb"
+    },
+    "demon/lively/wink-wave": {
+      "output": "modules/lively/sprites/pet-demon-wink-wave.webp",
+      "frames": 16,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        2048
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 8,
+      "sha256": "96d978a0925c5dbfdb74f19cf538bfe64cd005bf92fd8db65c1f943e0aa69250"
+    },
+    "attack/tsundere/remind": {
+      "output": "modules/tsundere/sprites/pet-attack-remind.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "892e9ae166d7f766fb0a46ef5f8694250f3498e8ed0398623a2cb94f2d52632b"
+    },
+    "demon/tsundere/remind": {
+      "output": "modules/tsundere/sprites/pet-demon-remind.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "8f6259c9b307d3f1bce9679cc0b0f4637e7b93a6e13eb40f9745bb5d608df230"
+    },
+    "attack/tsundere/hmph": {
+      "output": "modules/tsundere/sprites/pet-attack-hmph.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "4564cf777006737338c653dde13293d6fd84b55daee677202fe960f844df7b60"
+    },
+    "demon/tsundere/hmph": {
+      "output": "modules/tsundere/sprites/pet-demon-hmph.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "611616468892255ee1fe767853359d313951a8591f49e1e2f7bdbc9f689800d3"
+    },
+    "pet-normal-to-attack": {
+      "output": "sprites/pet-normal-to-attack.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "b3ffa55ba40daa7753729eb1db47c68a0f8245c5588100d970d9db84953fe435"
+    },
+    "pet-demon-to-attack": {
+      "output": "sprites/pet-demon-to-attack.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "f7e3f6874b94fb7a4885453e328f8ac3c452e1bea3b6964c73d9c92674485202"
+    },
+    "pet-attack-flourish": {
+      "output": "sprites/pet-attack-flourish.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 4,
+      "sha256": "4bc0f1578c66110e17c61386bf9a509e455fa73563ec8f670eb7fae34121dc75"
+    },
+    "pet-normal-to-demon": {
+      "output": "sprites/pet-normal-to-demon.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "b1ae3fe0f75b450d05285886313e1d4991a8082fb35c3b717b09de0f583e57cd"
+    },
+    "pet-attack-to-demon": {
+      "output": "sprites/pet-attack-to-demon.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "cc435dd716c5167b689f4ab42decbb6a01d693a30dd7f495e8dd5961915df8ec"
+    },
+    "pet-demon-flourish": {
+      "output": "sprites/pet-demon-flourish.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 4,
+      "sha256": "878662502347cf7592b10ec472c6a23a0ef561a69b814023c104848f0dbcd880"
+    },
+    "pet-attack-to-normal": {
+      "output": "sprites/pet-attack-to-normal.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "766002906a300bbbae66dea877c9c58a842420f8549ebc3f6f233e427200a610"
+    },
+    "pet-demon-to-normal": {
+      "output": "sprites/pet-demon-to-normal.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 6,
+      "sha256": "6c6ff998fcdc6fcfabfe7ade4b671a1f4f6eaeb6a4505a489b8bccb0d96e10bd"
+    }
+  }
+}

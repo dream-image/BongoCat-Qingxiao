@@ -1,5 +1,10 @@
 import { sep } from '@tauri-apps/api/path'
 
+import type {
+  PetStateAnimationVariantConfig,
+  PetStateEffectConfig,
+} from './pet-character-state'
+
 import { readBoundedTextFile, resolveModelResourcePath } from './path'
 
 export type PetLocalizedText = string | Record<string, string>
@@ -38,6 +43,33 @@ export interface PetModuleActionV1 {
   interruptible?: boolean
   dialogue?: PetModuleDialogueV1
   audio?: PetModuleAudioV1
+  stateEffect?: PetModuleStateEffectV1
+  // 持久形态必须引用各自完整 one-shot，避免运行时给普通人物临时叠色或叠附件。
+  stateAnimations?: PetModuleStateAnimationV1[]
+  // 对白和动画使用同一人物状态快照，防止化形后仍沿用普通形态的说话语气。
+  stateDialogues?: PetModuleStateDialogueV1[]
+}
+
+export interface PetModuleStateAnimationV1 {
+  priority?: number
+  match: Record<string, string>
+  animation: string
+}
+
+export interface PetModuleStateDialogueV1 {
+  priority?: number
+  match: Record<string, string>
+  dialogue: PetModuleDialogueV1
+}
+
+export interface PetModuleStateEffectV1 {
+  when?: 'started' | 'finished'
+  priority?: number
+  set: Record<string, string>
+  lifetime?:
+    | { type: 'session' }
+    | { type: 'duration', durationMs: number }
+    | { type: 'until-input' }
 }
 
 export interface PetModuleAudioV1 {
@@ -203,6 +235,12 @@ export interface PetRuntimeDialogue {
   }>
 }
 
+export interface PetRuntimeStateDialogue {
+  priority: number
+  match: Record<string, string>
+  dialogue: PetRuntimeDialogue
+}
+
 export interface PetRuntimeAudio {
   file: string
   chance: number
@@ -220,6 +258,9 @@ export interface PetRuntimeAction {
   interruptible: boolean
   dialogue?: PetRuntimeDialogue
   audio?: PetRuntimeAudio
+  stateEffect?: PetStateEffectConfig
+  stateAnimations?: PetStateAnimationVariantConfig[]
+  stateDialogues?: PetRuntimeStateDialogue[]
 }
 
 interface PetRuntimeTriggerBase {
@@ -372,6 +413,9 @@ const MAX_MODULE_TRIGGERS = 256
 const MAX_TOTAL_MODULE_ACTIONS = 512
 const MAX_TOTAL_MODULE_TRIGGERS = 256
 const MAX_DIALOGUE_LINES = 32
+const MAX_STATE_EFFECT_DIMENSIONS = 8
+const MAX_STATE_ANIMATIONS = 16
+const MAX_STATE_DIALOGUES = 16
 const MAX_LOCALIZED_VARIANTS = 16
 const MAX_ID_LENGTH = 80
 const MAX_TEXT_LENGTH = 240
@@ -686,7 +730,18 @@ function normalizeActions(
     assertRecord(rawAction, label)
     assertAllowedKeys(
       rawAction,
-      ['label', 'animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue', 'audio'],
+      [
+        'label',
+        'animation',
+        'priority',
+        'cooldownMs',
+        'interruptible',
+        'dialogue',
+        'audio',
+        'stateEffect',
+        'stateAnimations',
+        'stateDialogues',
+      ],
       label,
     )
 
@@ -695,36 +750,15 @@ function normalizeActions(
       ? undefined
       : normalizeLocalizedText(rawAction.label, `${label}.label`)
 
-    let animation: string | undefined
-
-    if (rawAction.animation !== undefined) {
-      assertNonEmptyString(rawAction.animation, `${label}.animation`)
-
-      if (rawAction.animation.startsWith('@model/')) {
-        // 跨作用域引用必须显式写 @model/，防止模块拼写错误悄悄命中同名模型动画。
-        animation = rawAction.animation.slice('@model/'.length)
-
-        if (!animation || animation.includes('/')) {
-          throw new TypeError(`${label}.animation contains an invalid @model reference`)
-        }
-      } else {
-        assertSafeId(rawAction.animation, `${label}.animation`)
-        animation = qualify(moduleId, rawAction.animation)
-
-        if (!localAnimationIds.has(animation)) {
-          throw new TypeError(`${label}.animation references an unknown local animation`)
-        }
-      }
-
-      const animationConfig = Object.prototype.hasOwnProperty.call(animations, animation)
-        ? animations[animation]
-        : undefined
-
-      if (!animationConfig) throw new TypeError(`${label}.animation references an unknown animation`)
-      if (animationConfig.loop) {
-        throw new TypeError(`${label}.animation must reference a non-looping animation`)
-      }
-    }
+    const animation = rawAction.animation === undefined
+      ? undefined
+      : normalizeActionAnimationReference(
+          rawAction.animation,
+          `${label}.animation`,
+          moduleId,
+          animations,
+          localAnimationIds,
+        )
 
     const dialogue = rawAction.dialogue === undefined
       ? undefined
@@ -732,6 +766,21 @@ function normalizeActions(
     const audio = rawAction.audio === undefined
       ? undefined
       : normalizeAudio(rawAction.audio, label, moduleDirectory)
+    const stateEffect = rawAction.stateEffect === undefined
+      ? undefined
+      : normalizeStateEffect(rawAction.stateEffect, label)
+    const stateAnimations = rawAction.stateAnimations === undefined
+      ? undefined
+      : normalizeStateAnimations(
+          rawAction.stateAnimations,
+          label,
+          moduleId,
+          animations,
+          localAnimationIds,
+        )
+    const stateDialogues = rawAction.stateDialogues === undefined
+      ? undefined
+      : normalizeStateDialogues(rawAction.stateDialogues, label, canvas)
 
     // 音频只增强一个已有动作，不单独决定状态机时长；否则无法从配置判断何时释放动作队列。
     if (!animation && !dialogue) {
@@ -754,8 +803,219 @@ function normalizeActions(
         : assertBoolean(rawAction.interruptible, `${label}.interruptible`),
       dialogue,
       audio,
+      stateEffect,
+      stateAnimations,
+      stateDialogues,
     } satisfies PetRuntimeAction
   })
+}
+
+function normalizeActionAnimationReference(
+  value: unknown,
+  label: string,
+  moduleId: string,
+  animations: Record<string, PetBehaviorModuleAnimationConfig>,
+  localAnimationIds: Set<string>,
+) {
+  assertNonEmptyString(value, label)
+
+  let animation: string
+
+  if (value.startsWith('@model/')) {
+    // 跨作用域引用必须显式写 @model/，防止模块拼写错误悄悄命中同名模型动画。
+    animation = value.slice('@model/'.length)
+    if (!animation || animation.includes('/')) {
+      throw new TypeError(`${label} contains an invalid @model reference`)
+    }
+  } else {
+    assertSafeId(value, label)
+    animation = qualify(moduleId, value)
+    if (!localAnimationIds.has(animation)) {
+      throw new TypeError(`${label} references an unknown local animation`)
+    }
+  }
+
+  const animationConfig = Object.prototype.hasOwnProperty.call(animations, animation)
+    ? animations[animation]
+    : undefined
+
+  if (!animationConfig) throw new TypeError(`${label} references an unknown animation`)
+  if (animationConfig.loop) throw new TypeError(`${label} must reference a non-looping animation`)
+
+  return animation
+}
+
+function normalizeStateAnimations(
+  value: unknown,
+  actionLabel: string,
+  moduleId: string,
+  animations: Record<string, PetBehaviorModuleAnimationConfig>,
+  localAnimationIds: Set<string>,
+): PetStateAnimationVariantConfig[] {
+  // 这里只解析命名空间和资源引用；match 中的 dimension/value 会在顶层状态机就绪后
+  // 由 pet-behavior 的模型级校验统一确认，避免模块加载顺序影响合法性。
+  const label = `${actionLabel}.stateAnimations`
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty array`)
+  }
+  if (value.length > MAX_STATE_ANIMATIONS) {
+    throw new RangeError(`${label} cannot exceed ${MAX_STATE_ANIMATIONS} variants`)
+  }
+
+  return value.map((candidate, index) => {
+    const variantLabel = `${label}[${index}]`
+
+    assertRecord(candidate, variantLabel)
+    assertAllowedKeys(candidate, ['priority', 'match', 'animation'], variantLabel)
+    assertRecord(candidate.match, `${variantLabel}.match`)
+    const entries = Object.entries(candidate.match)
+    if (entries.length === 0) throw new TypeError(`${variantLabel}.match cannot be empty`)
+    if (entries.length > MAX_STATE_EFFECT_DIMENSIONS) {
+      throw new RangeError(
+        `${variantLabel}.match cannot exceed ${MAX_STATE_EFFECT_DIMENSIONS} dimensions`,
+      )
+    }
+
+    const match: Record<string, string> = {}
+    for (const [dimension, stateValue] of entries) {
+      const normalizedDimension = assertSafeId(dimension, `${variantLabel}.match dimension`)
+      match[normalizedDimension] = assertSafeId(
+        stateValue,
+        `${variantLabel}.match.${dimension}`,
+      )
+    }
+
+    return {
+      priority: candidate.priority === undefined
+        ? 0
+        : assertBoundedInteger(candidate.priority, 0, 99, `${variantLabel}.priority`),
+      match,
+      animation: normalizeActionAnimationReference(
+        candidate.animation,
+        `${variantLabel}.animation`,
+        moduleId,
+        animations,
+        localAnimationIds,
+      ),
+    }
+  })
+}
+
+function normalizeStateDialogues(
+  value: unknown,
+  actionLabel: string,
+  canvas: PetBehaviorModuleLoadContext['canvas'],
+): PetRuntimeStateDialogue[] {
+  const label = `${actionLabel}.stateDialogues`
+
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError(`${label} must be a non-empty array`)
+  }
+  if (value.length > MAX_STATE_DIALOGUES) {
+    throw new RangeError(`${label} cannot exceed ${MAX_STATE_DIALOGUES} variants`)
+  }
+
+  return value.map((candidate, index) => {
+    const variantLabel = `${label}[${index}]`
+
+    assertRecord(candidate, variantLabel)
+    assertAllowedKeys(candidate, ['priority', 'match', 'dialogue'], variantLabel)
+    assertRecord(candidate.match, `${variantLabel}.match`)
+    const entries = Object.entries(candidate.match)
+
+    if (entries.length === 0) throw new TypeError(`${variantLabel}.match cannot be empty`)
+    if (entries.length > MAX_STATE_EFFECT_DIMENSIONS) {
+      throw new RangeError(
+        `${variantLabel}.match cannot exceed ${MAX_STATE_EFFECT_DIMENSIONS} dimensions`,
+      )
+    }
+
+    const match: Record<string, string> = {}
+    for (const [dimension, stateValue] of entries) {
+      const normalizedDimension = assertSafeId(dimension, `${variantLabel}.match dimension`)
+      match[normalizedDimension] = assertSafeId(
+        stateValue,
+        `${variantLabel}.match.${dimension}`,
+      )
+    }
+
+    return {
+      priority: candidate.priority === undefined
+        ? 0
+        : assertBoundedInteger(candidate.priority, 0, 99, `${variantLabel}.priority`),
+      match,
+      dialogue: normalizeDialogue(candidate.dialogue, variantLabel, canvas),
+    }
+  })
+}
+
+function normalizeStateEffect(value: unknown, actionLabel: string): PetStateEffectConfig {
+  const label = `${actionLabel}.stateEffect`
+
+  assertRecord(value, label)
+  assertAllowedKeys(value, ['when', 'priority', 'set', 'lifetime'], label)
+  assertRecord(value.set, `${label}.set`)
+
+  const stateEntries = Object.entries(value.set)
+
+  if (stateEntries.length === 0) throw new TypeError(`${label}.set cannot be empty`)
+  if (stateEntries.length > MAX_STATE_EFFECT_DIMENSIONS) {
+    throw new RangeError(`${label}.set cannot exceed ${MAX_STATE_EFFECT_DIMENSIONS} dimensions`)
+  }
+
+  const set: Record<string, string> = {}
+
+  for (const [dimension, stateValue] of stateEntries) {
+    // 显式写入已校验后的字符串，避免 Object.fromEntries 保留 unknown 而削弱运行时配置类型。
+    const normalizedDimension = assertSafeId(dimension, `${label}.set dimension`)
+    const normalizedStateValue = assertSafeId(stateValue, `${label}.set.${dimension}`)
+
+    set[normalizedDimension] = normalizedStateValue
+  }
+  const when = value.when ?? 'finished'
+
+  if (when !== 'started' && when !== 'finished') {
+    throw new TypeError(`${label}.when must be started or finished`)
+  }
+
+  const priority = value.priority === undefined
+    ? 0
+    : assertBoundedInteger(value.priority, 0, 99, `${label}.priority`)
+
+  if (value.lifetime === undefined) {
+    return { when, priority, set, lifetime: { type: 'session' } }
+  }
+
+  const lifetimeLabel = `${label}.lifetime`
+
+  assertRecord(value.lifetime, lifetimeLabel)
+
+  if (value.lifetime.type === 'session' || value.lifetime.type === 'until-input') {
+    assertAllowedKeys(value.lifetime, ['type'], lifetimeLabel)
+
+    return { when, priority, set, lifetime: { type: value.lifetime.type } }
+  }
+
+  if (value.lifetime.type === 'duration') {
+    assertAllowedKeys(value.lifetime, ['type', 'durationMs'], lifetimeLabel)
+
+    return {
+      when,
+      priority,
+      set,
+      lifetime: {
+        type: 'duration',
+        durationMs: assertTimerDelay(
+          value.lifetime.durationMs,
+          false,
+          `${lifetimeLabel}.durationMs`,
+        ),
+      },
+    }
+  }
+
+  throw new TypeError(`${lifetimeLabel}.type must be session, duration, or until-input`)
 }
 
 function normalizeAudio(

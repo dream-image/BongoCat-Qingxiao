@@ -14,7 +14,7 @@
     "build:vite": "vite build",
     "build:icon": "tsx scripts/buildIcon.ts",
     "preview": "vite preview",
-    "test": "tsx --test src/utils/wwise-opus.test.ts",
+    "test": "tsx --test src/utils/*.test.ts",
     "tauri": "tauri",
     "lint": "eslint --fix src",
     "preinstall": "npx only-allow pnpm",

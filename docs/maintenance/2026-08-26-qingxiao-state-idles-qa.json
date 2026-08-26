@@ -1,0 +1,567 @@
+{
+  "model": "src-tauri/assets/models/qingxiao",
+  "animations": {
+    "pet-drowsy": {
+      "output": "sprites/pet-drowsy.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          81,
+          478,
+          482
+        ],
+        [
+          19,
+          76,
+          478,
+          482
+        ],
+        [
+          19,
+          81,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 5,
+      "sha256": "94504a84e8be3de536c91916b17fe6f770164f43f8493a105cd95174fbda9bb8",
+      "source": "sprites/pet-doze.webp",
+      "sourceFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    "pet-nap": {
+      "output": "sprites/pet-nap.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          76,
+          478,
+          482
+        ],
+        [
+          19,
+          75,
+          478,
+          482
+        ],
+        [
+          19,
+          75,
+          478,
+          482
+        ],
+        [
+          19,
+          76,
+          478,
+          482
+        ],
+        [
+          19,
+          81,
+          478,
+          482
+        ],
+        [
+          19,
+          76,
+          478,
+          482
+        ],
+        [
+          19,
+          75,
+          478,
+          482
+        ],
+        [
+          19,
+          75,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 3,
+      "sha256": "c753b03b7eec019fd40dbc2c09ac598d1b83defe72cac1e8b6174178696473f1",
+      "source": "sprites/pet-doze.webp",
+      "sourceFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        7,
+        6,
+        5
+      ]
+    },
+    "pet-sleep": {
+      "output": "sprites/pet-sleep.webp",
+      "frames": 8,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1024
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 3,
+      "sha256": "5906c04f66fa230b15f1ebb3eda3aa503292707eb0e9f520842d86915027717c",
+      "source": "sprites/pet-dream.webp",
+      "sourceFrames": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        7,
+        6,
+        5
+      ]
+    },
+    "pet-happy": {
+      "output": "sprites/pet-happy.webp",
+      "frames": 12,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 4,
+      "sha256": "a8eb9ba10927a8575c5240f16e852df48f618e8744d01ef58f394f1477b0a6a3",
+      "source": "sprites/pet-content.webp",
+      "sourceFrames": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        7,
+        6,
+        5,
+        4,
+        3
+      ]
+    },
+    "pet-annoyed": {
+      "output": "sprites/pet-annoyed.webp",
+      "frames": 10,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 3,
+      "sha256": "1b1a3e433d09af8b60e9b4e47c84ed4e960e18f1974d91b7b025f22dee0a5e72",
+      "source": "modules/tsundere/sprites/pet-hmph.webp",
+      "sourceFrames": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        7,
+        6,
+        5,
+        4
+      ]
+    },
+    "pet-concerned": {
+      "output": "sprites/pet-concerned.webp",
+      "frames": 10,
+      "columns": 4,
+      "decodedSize": [
+        2048,
+        1536
+      ],
+      "alphaBboxes": [
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ],
+        [
+          19,
+          85,
+          478,
+          482
+        ]
+      ],
+      "edgeAlphaPixels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "hiddenRgbMaximum": 0,
+      "uniqueFrames": 3,
+      "sha256": "cd70281023074e0a8d7380def738e10559de7d94ab9df2a641f69c0b62e0f103",
+      "source": "modules/tsundere/sprites/pet-remind.webp",
+      "sourceFrames": [
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        7,
+        6,
+        5,
+        4
+      ]
+    }
+  }
+}

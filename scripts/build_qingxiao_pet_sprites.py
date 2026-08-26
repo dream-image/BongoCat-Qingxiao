@@ -1746,7 +1746,7 @@ def build_animations(model_dir: Path) -> tuple[list[AnimationSpec], np.ndarray, 
         blush=True,
     )
 
-    # 白色化形保留原 transform 动画；心魔用 16 帧对称包络渐变成参考图里的低饱和灰蓝紫。
+    # 战斗化形保留原 transform 动画；心魔用 16 帧对称包络渐变成参考图里的低饱和灰蓝紫。
     # 多出的帧只细化进入/退出过程，总时长仍为 2.32 秒，避免用更长播放时间伪装流畅度。
     heart_demon_progress = [
         0, 0.055, 0.198, 0.394, 0.606, 0.802, 0.945, 1,

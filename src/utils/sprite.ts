@@ -142,7 +142,7 @@ interface SpeechTextLayout {
 interface ActivePlayback {
   handle: SpritePlaybackHandle
   loop: boolean
-  returnTo: string
+  returnTo?: string
   resolve: (result: SpritePlaybackResult) => void
 }
 
@@ -340,9 +340,13 @@ class SpriteRenderer {
     options: SpritePlayOptions = {},
   ): SpritePlaybackHandle | null {
     const animation = this.animations.get(name)
-    const returnTo = options.returnTo ?? this.config?.defaultAnimation
+    // 一次性宠物动作使用 hold，把“下一帧回到哪个人物状态”交给行为控制器原子决定；
+    // 键盘等旧调用仍默认回 defaultAnimation，保持既有模型行为不变。
+    const returnTo = options.completion === 'hold'
+      ? void 0
+      : options.returnTo ?? this.config?.defaultAnimation
 
-    if (!animation || !returnTo || !this.animations.has(returnTo)) return null
+    if (!animation || (returnTo !== void 0 && !this.animations.has(returnTo))) return null
 
     // 先结算旧句柄再替换 activePlayback，保证等待者一定收到一次且只收到一次终止原因。
     this.settleActivePlayback('interrupted')

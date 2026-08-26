@@ -31,6 +31,7 @@ Resolve these facts from the request and references:
 - permanent attached elements such as ribbons, tails, wings, ornaments, or back pieces, including their stable depth order
 - allowed expression regions such as eyes, brows, cheeks, and lips; approval of a character template does not approve its background or temporary effects
 - idle behavior
+- optional looping state idles such as relaxed, drowsy, nap, sleep, mood, and transformed forms
 - reusable action poses and their key groups
 - special actions such as Enter transformation
 - bubble origin on the prop or character
@@ -133,6 +134,8 @@ Create this final structure:
 Do not add legacy `resources/left-keys` or `resources/right-keys` assets to a sprite model.
 
 Write `model.json` only after the animation names and sheets exist. Use the schema and behavior in [model-contract.md](references/model-contract.md).
+
+If the action-module runtime will select several steady states, author every Visual Profile target as a top-level looping animation. A state loop may reuse an existing sheet with different `frameDurations`, or deterministically select adjacent/symmetric stable frames from an approved action donor. Never loop a full one-shot transition that visibly enters and then leaves the state. For any persistent form that changes material or silhouette, render a complete matching version of every reusable action plus source-aware form transitions; use the action module's `stateAnimations` mapping instead of runtime overlays or palette filters.
 
 For key bubbles:
 

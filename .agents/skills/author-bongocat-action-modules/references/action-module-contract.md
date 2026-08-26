@@ -141,6 +141,124 @@ Action 的 `animation`：
 
 `priority` 范围为 0–99，只在同一来源档位内排序；来源总体优先级由运行时控制。`cooldownMs` 为非负定时器值。`interruptible` 默认 `true`。
 
+## 人物状态机与动作效果
+
+`PetBehaviorController` 的 `work-idle`、`pet-entering`、`pet-action` 等值只表示播放阶段。模型希望表达清醒、困倦、情绪或形态时，在 `behaviors.pet.stateMachine` 声明人物状态：
+
+```json
+{
+  "dimensions": {
+    "activity": {
+      "initial": "awake",
+      "values": ["awake", "relaxed", "drowsy", "sleeping"]
+    },
+    "mood": {
+      "initial": "calm",
+      "values": ["calm", "happy", "annoyed"]
+    }
+  },
+  "profiles": [
+    {
+      "id": "happy",
+      "priority": 100,
+      "scene": "pet",
+      "match": { "mood": "happy" },
+      "animation": "pet-happy"
+    },
+    {
+      "id": "pet-fallback",
+      "priority": 0,
+      "scene": "pet",
+      "match": {},
+      "animation": "pet-idle"
+    }
+  ],
+  "rules": [
+    {
+      "id": "drowsy-after-ten-minutes",
+      "priority": 20,
+      "when": { "scene": "pet", "idleForMs": 600000 },
+      "set": { "activity": "drowsy" }
+    }
+  ]
+}
+```
+
+- 最多 8 个 dimension，每维最多 32 个 value；id 使用小写字母、数字和连字符。
+- Profile 只能引用顶层循环动画，按 `priority`、匹配维度数量和文件顺序稳定选择；必须有 `scene:"pet" + match:{}` 的兜底。
+- Rule 第一版支持 `scene`、`idleForMs` 和本地 `dailyWindow`。状态窗口的 `weekdays` 使用 JavaScript 本地星期 `0–6`（周日到周六），与动作 trigger 使用的 `1–7` 不同。
+- 不配置 `stateMachine` 的旧模型继续使用 `defaultAnimation` 和 `idleAnimation`。
+
+模块 action 可用 `stateEffect` 在真正启动或正常完成后改变人物状态：
+
+```json
+{
+  "when": "finished",
+  "priority": 30,
+  "set": { "mood": "happy" },
+  "lifetime": { "type": "duration", "durationMs": 120000 }
+}
+```
+
+`when` 默认为 `finished`；被打断或销毁的动作不提交完成效果。`lifetime` 支持 `session`、`until-input` 和带正数 `durationMs` 的 `duration`。新 action assignment 会覆盖同一维度的旧 assignment；不要建立需要回滚过期状态的隐式历史栈。无 `stateEffect` 的动作是临时动作，完成后回到“完成当时”最新状态对应的常态，而不是固定回 `pet-idle`。
+
+当形态会改变人物颜色、材质或轮廓时，action 还需用 `stateAnimations` 选择同形态的一次性动画：
+
+```json
+{
+  "animation": "gesture",
+  "stateAnimations": [
+    {
+      "priority": 90,
+      "match": { "form": "attack" },
+      "animation": "attack-gesture"
+    },
+    {
+      "priority": 90,
+      "match": { "form": "demon" },
+      "animation": "demon-gesture"
+    }
+  ]
+}
+```
+
+- 每个 action 最多 16 个变体；`match` 不能为空，且只能引用状态机已有 dimension/value。
+- 变体动画与普通 `animation` 遵循相同引用规则，必须是非循环动画。
+- 启动动作时先读取当前状态，再按 `priority`、匹配维度数量和配置顺序选择变体；找不到匹配项才回退到基础动画。
+- `stateEffect` 在动作开始或完成阶段更新“目标状态”，不参与本次选图。因此化形动作应按“来源形态”分别提供普通→战斗、心魔→战斗、战斗形态强调等完整过渡。
+- 只要某种持久形态仍允许触发该动作，就必须提供对应完整雪碧图；不能在运行时给普通人物叠一层染色、飘带或特效来伪装成形态版本。
+
+同一个 action 还可以用 `stateDialogues` 让不同形态保持不同语气：
+
+```json
+{
+  "dialogue": {
+    "lines": [{ "text": { "zh-CN": "一念成锋。", "en-US": "One thought becomes an edge." } }]
+  },
+  "stateDialogues": [
+    {
+      "priority": 90,
+      "match": { "form": "attack" },
+      "dialogue": {
+        "lines": [{ "text": { "zh-CN": "锋起，破妄。", "en-US": "Edge rise—shatter illusion." } }]
+      }
+    },
+    {
+      "priority": 90,
+      "match": { "form": "demon" },
+      "dialogue": {
+        "lines": [{ "text": { "zh-CN": "现在后悔，晚了。", "en-US": "Too late for regrets." } }]
+      }
+    }
+  ]
+}
+```
+
+- 每个 action 最多 16 个对白变体；`priority`、`match` 和回退顺序与 `stateAnimations` 一致。
+- 动画与对白在动作真正启动时读取同一个人物状态快照；随后 `stateEffect` 即使立即改状态，也不会改变本次动作的图或台词。
+- 未命中变体时回退到普通 `dialogue`。频率、延迟、持续时间、anchor、权重和本地化均使用完整 dialogue 契约。
+- 固定 `audio` 仍是 action 级配置；若各形态录音内容不同，应先扩展同样的状态音频契约，不能让固定语音和状态对白互相矛盾。
+
 ## 对白
 
 `dialogue.lines` 为 1–32 项。每项可以直接是字符串/本地化表，也可以是 `{ "text": ..., "weight": 1 }`。本地化表最多 16 个 locale，每段文本最长 240 字符。

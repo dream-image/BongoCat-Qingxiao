@@ -49,7 +49,7 @@
 ## 用户确认的角色与画面规则
 
 - 用户确认的是人物造型模板，不是模板图片的背景、构图或整套特效。源图中的临时灰底不能进入正式资源。
-- 普通形态使用清透的蓝、青、白配色；白色化形使用月白和冰蓝；心魔形态使用克制的薰衣草紫和冷紫，不使用大面积发黑、过饱和的深紫。
+- 普通形态使用清透的蓝、青、白配色；战斗形态使用月白和冰蓝；心魔形态使用克制的薰衣草紫和冷紫，不使用大面积发黑、过饱和的深紫。
 - 背后双层长飘带必须常驻，人物位于飘带视觉中心。飘带要随身体和动作产生连续变化，并服从人物、古琴与手臂的前后遮挡关系。
 - 常态和按键动作以睁眼为主。闭眼只用于眨眼、困倦、入睡、沉浸弹奏等有明确语义的帧，不能把闭眼当作默认待机姿态。
 - 动作允许细微眉眼变化、嘴角变化和小幅开合口型，但不能让五官比例、服装、发型、配饰或古琴在帧间漂移。
@@ -72,9 +72,9 @@
 
 ## 27 套正式动画
 
-工作态包含 `idle`、`pluck-01` 至 `pluck-10` 和 `transform`。宠物态包含 `pet-enter`、`pet-idle`、`pet-exit`、`pet-doze`、`pet-dream`、`pet-chime`、`pet-curious`、`pet-content`、`pet-startled`、`pet-summon-orb`、`pet-glissando`、`pet-remind`、`pet-wink-wave`、`pet-hmph` 与 `pet-heart-demon`。
+工作态包含 `idle`、`pluck-01` 至 `pluck-10` 和 `transform`。宠物态包含 `pet-enter`、`pet-idle`、`pet-exit`、`pet-doze`、`pet-dream`、`pet-chime`、`pet-curious`、`pet-content`、`pet-startled`、`pet-summon-orb`、`pet-sword-qi-focus`、`pet-glissando`、`pet-remind`、`pet-wink-wave`、`pet-hmph` 与 `pet-heart-demon`。
 
-其中 6 套模组动画不是从顶层 `sprites/` 读取：`pet-startled`、`pet-summon-orb`、`pet-glissando`、`pet-wink-wave` 位于 `modules/lively/sprites/`，`pet-remind`、`pet-hmph` 位于 `modules/tsundere/sprites/`。发布新图时必须替换这些运行时真实路径；顶层的同名副本不会被模组加载，保留副本反而会造成“源码看似已更新、应用仍播放旧图”的误判。
+其中 7 套模组动画不是从顶层 `sprites/` 读取：`pet-startled`、`pet-summon-orb`、`pet-sword-qi-focus`、`pet-glissando`、`pet-wink-wave` 位于 `modules/lively/sprites/`，`pet-remind`、`pet-hmph` 位于 `modules/tsundere/sprites/`。发布新图时必须替换这些运行时真实路径；顶层的同名副本不会被模组加载，保留副本反而会造成“源码看似已更新、应用仍播放旧图”的误判。
 
 所有帧均为 512×512。雪碧表的列数、帧数和最终画布尺寸由 `scripts/finalize_qingxiao_redraw.py` 中的 `SHEET_SPECS` 统一约束，不能凭生成图的网格外观猜测。
 

@@ -15,7 +15,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [75, 90, 105, 125, 160, 240, 240, 160, 125, 105, 90, 75]
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
     },
     "summon-orb": {
       "file": "sprites/pet-summon-orb.webp",
@@ -25,7 +38,51 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [70, 80, 95, 110, 130, 160, 210, 300, 300, 210, 160, 130, 110, 95, 80, 70]
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        300,
+        300,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "sword-qi-focus": {
+      "file": "sprites/pet-sword-qi-focus.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        320,
+        320,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
     },
     "glissando": {
       "file": "sprites/pet-glissando.webp",
@@ -35,7 +92,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [80, 110, 140, 180, 240, 300, 300, 240, 180, 140, 110, 80]
+      "frameDurations": [
+        80,
+        110,
+        140,
+        180,
+        240,
+        300,
+        300,
+        240,
+        180,
+        140,
+        110,
+        80
+      ]
     },
     "wink-wave": {
       "file": "sprites/pet-wink-wave.webp",
@@ -45,7 +115,278 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [70, 80, 95, 110, 130, 160, 210, 280, 280, 210, 160, 130, 110, 95, 80, 70]
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        280,
+        280,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "attack-startled": {
+      "file": "sprites/pet-attack-startled.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
+    },
+    "demon-startled": {
+      "file": "sprites/pet-demon-startled.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
+    },
+    "attack-summon-orb": {
+      "file": "sprites/pet-attack-summon-orb.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        300,
+        300,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "demon-summon-orb": {
+      "file": "sprites/pet-demon-summon-orb.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        300,
+        300,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "attack-sword-qi-focus": {
+      "file": "sprites/pet-attack-sword-qi-focus.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        320,
+        320,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "demon-sword-qi-focus": {
+      "file": "sprites/pet-demon-sword-qi-focus.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        320,
+        320,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "attack-glissando": {
+      "file": "sprites/pet-attack-glissando.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        110,
+        140,
+        180,
+        240,
+        300,
+        300,
+        240,
+        180,
+        140,
+        110,
+        80
+      ]
+    },
+    "demon-glissando": {
+      "file": "sprites/pet-demon-glissando.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        110,
+        140,
+        180,
+        240,
+        300,
+        300,
+        240,
+        180,
+        140,
+        110,
+        80
+      ]
+    },
+    "attack-wink-wave": {
+      "file": "sprites/pet-attack-wink-wave.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        280,
+        280,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
+    },
+    "demon-wink-wave": {
+      "file": "sprites/pet-demon-wink-wave.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        70,
+        80,
+        95,
+        110,
+        130,
+        160,
+        210,
+        280,
+        280,
+        210,
+        160,
+        130,
+        110,
+        95,
+        80,
+        70
+      ]
     }
   },
   "actions": {
@@ -80,14 +421,30 @@
             "weight": 1
           }
         ]
-      }
-    },
-    "summon-orb": {
-      "label": {
-        "zh-CN": "凝一颗云珠",
-        "en-US": "Summon a cloud orb"
       },
-      "animation": "summon-orb",
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-startled"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-startled"
+        }
+      ]
+    },
+    "sword-qi-focus": {
+      "label": {
+        "zh-CN": "剑气凝心",
+        "en-US": "Focus sword qi"
+      },
+      "animation": "sword-qi-focus",
       "priority": 24,
       "cooldownMs": 18000,
       "interruptible": true,
@@ -102,20 +459,100 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "云气，凝。",
-              "en-US": "Cloudlight, gather."
+              "zh-CN": "一念成锋。",
+              "en-US": "One thought becomes an edge."
             },
             "weight": 3
           },
           {
             "text": {
-              "zh-CN": "别碰，会散。",
-              "en-US": "Don't touch. It'll scatter."
+              "zh-CN": "剑气凝心，去。",
+              "en-US": "Sword qi, heed my will."
             },
             "weight": 2
           }
         ]
-      }
+      },
+      "stateDialogues": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "dialogue": {
+            "chance": 1,
+            "delayMs": 100,
+            "durationMs": 2100,
+            "anchor": {
+              "x": 356,
+              "y": 170
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "锋起，破妄。",
+                  "en-US": "Edge rise—shatter illusion."
+                },
+                "weight": 3
+              },
+              {
+                "text": {
+                  "zh-CN": "这一剑，不留余地。",
+                  "en-US": "This strike leaves no quarter."
+                },
+                "weight": 2
+              }
+            ]
+          }
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "dialogue": {
+            "chance": 1,
+            "delayMs": 140,
+            "durationMs": 2300,
+            "anchor": {
+              "x": 356,
+              "y": 170
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "呵……这道剑气，可没那么温柔。",
+                  "en-US": "Heh… this sword qi is not so gentle."
+                },
+                "weight": 3
+              },
+              {
+                "text": {
+                  "zh-CN": "现在后悔，晚了。",
+                  "en-US": "Too late for regrets."
+                },
+                "weight": 2
+              }
+            ]
+          }
+        }
+      ],
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-sword-qi-focus"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-sword-qi-focus"
+        }
+      ]
     },
     "glissando": {
       "label": {
@@ -150,7 +587,69 @@
             "weight": 3
           }
         ]
-      }
+      },
+      "stateDialogues": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "dialogue": {
+            "delayMs": 100,
+            "durationMs": 2100,
+            "anchor": {
+              "x": 342,
+              "y": 168
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "弦音亦可化刃。",
+                  "en-US": "These strings can become a blade."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "dialogue": {
+            "delayMs": 120,
+            "durationMs": 2200,
+            "anchor": {
+              "x": 342,
+              "y": 168
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "听清了，这是引魂调。",
+                  "en-US": "Listen closely. This tune calls the soul."
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-glissando"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-glissando"
+        }
+      ]
     },
     "wink-wave": {
       "label": {
@@ -161,6 +660,17 @@
       "priority": 32,
       "cooldownMs": 15000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 30,
+        "set": {
+          "mood": "happy"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 120000
+        }
+      },
       "audio": {
         "file": "@model/audio/common-voice-16-arrival.wem",
         "delayMs": 90,
@@ -183,7 +693,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "holiday-greeting": {
       "label": {
@@ -218,7 +744,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "startup-greeting": {
       "label": {
@@ -229,6 +771,17 @@
       "priority": 35,
       "cooldownMs": 21600000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 20,
+        "set": {
+          "mood": "happy"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 120000
+        }
+      },
       "audio": {
         "file": "@model/audio/common-voice-16-arrival.wem",
         "delayMs": 90,
@@ -238,7 +791,10 @@
         "chance": 1,
         "delayMs": 90,
         "durationMs": 2300,
-        "anchor": { "x": 350, "y": 164 },
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
         "lines": [
           {
             "text": {
@@ -248,7 +804,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "familiar-return": {
       "label": {
@@ -259,6 +831,17 @@
       "priority": 34,
       "cooldownMs": 21600000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 25,
+        "set": {
+          "mood": "happy"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 120000
+        }
+      },
       "audio": {
         "file": "@model/audio/common-voice-17-safe-return.wem",
         "delayMs": 100,
@@ -268,7 +851,10 @@
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2400,
-        "anchor": { "x": 350, "y": 164 },
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
         "lines": [
           {
             "text": {
@@ -278,7 +864,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "long-awaited-return": {
       "label": {
@@ -293,7 +895,10 @@
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2700,
-        "anchor": { "x": 352, "y": 164 },
+        "anchor": {
+          "x": 352,
+          "y": 164
+        },
         "lines": [
           {
             "text": {
@@ -310,7 +915,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-startled"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-startled"
+        }
+      ]
     },
     "typing-flurry": {
       "label": {
@@ -330,7 +951,10 @@
         "chance": 0.75,
         "delayMs": 100,
         "durationMs": 2200,
-        "anchor": { "x": 342, "y": 168 },
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
         "lines": [
           {
             "text": {
@@ -340,7 +964,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-glissando"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-glissando"
+        }
+      ]
     },
     "gamepad-combo": {
       "label": {
@@ -355,7 +995,10 @@
         "chance": 0.8,
         "delayMs": 100,
         "durationMs": 2200,
-        "anchor": { "x": 356, "y": 170 },
+        "anchor": {
+          "x": 356,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -372,7 +1015,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-summon-orb"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-summon-orb"
+        }
+      ]
     },
     "idle-soft-tune": {
       "label": {
@@ -387,7 +1046,10 @@
         "chance": 0.35,
         "delayMs": 120,
         "durationMs": 2000,
-        "anchor": { "x": 342, "y": 168 },
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
         "lines": [
           {
             "text": {
@@ -404,7 +1066,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-glissando"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-glissando"
+        }
+      ]
     },
     "weekday-greeting": {
       "label": {
@@ -419,7 +1097,10 @@
         "chance": 1,
         "delayMs": 90,
         "durationMs": 2300,
-        "anchor": { "x": 350, "y": 164 },
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
         "lines": [
           {
             "text": {
@@ -436,7 +1117,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "weekend-greeting": {
       "label": {
@@ -451,7 +1148,10 @@
         "chance": 1,
         "delayMs": 110,
         "durationMs": 2300,
-        "anchor": { "x": 356, "y": 170 },
+        "anchor": {
+          "x": 356,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -468,7 +1168,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-summon-orb"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-summon-orb"
+        }
+      ]
     },
     "friday-release": {
       "label": {
@@ -483,7 +1199,10 @@
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2400,
-        "anchor": { "x": 342, "y": 168 },
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
         "lines": [
           {
             "text": {
@@ -500,7 +1219,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-glissando"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-glissando"
+        }
+      ]
     },
     "labor-day-greeting": {
       "label": {
@@ -515,7 +1250,10 @@
         "chance": 1,
         "delayMs": 90,
         "durationMs": 2500,
-        "anchor": { "x": 350, "y": 164 },
+        "anchor": {
+          "x": 350,
+          "y": 164
+        },
         "lines": [
           {
             "text": {
@@ -532,7 +1270,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-wink-wave"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-wink-wave"
+        }
+      ]
     },
     "ambient-orb": {
       "label": {
@@ -547,7 +1301,10 @@
         "chance": 0.08,
         "delayMs": 120,
         "durationMs": 1800,
-        "anchor": { "x": 356, "y": 170 },
+        "anchor": {
+          "x": 356,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -557,7 +1314,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-summon-orb"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-summon-orb"
+        }
+      ]
     },
     "ambient-glissando": {
       "label": {
@@ -572,7 +1345,10 @@
         "chance": 0.12,
         "delayMs": 120,
         "durationMs": 1800,
-        "anchor": { "x": 342, "y": 168 },
+        "anchor": {
+          "x": 342,
+          "y": 168
+        },
         "lines": [
           {
             "text": {
@@ -582,7 +1358,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-glissando"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-glissando"
+        }
+      ]
     }
   },
   "triggers": [
@@ -602,12 +1394,12 @@
       "enterPet": true
     },
     {
-      "id": "manual-summon-orb",
+      "id": "manual-sword-qi-focus",
       "type": "manual",
-      "action": "summon-orb",
+      "action": "sword-qi-focus",
       "label": {
-        "zh-CN": "凝一颗云珠",
-        "en-US": "Summon a cloud orb"
+        "zh-CN": "剑气凝心",
+        "en-US": "Focus sword qi"
       },
       "group": {
         "zh-CN": "灵动互动",
@@ -649,7 +1441,10 @@
     {
       "id": "ambient-lively",
       "type": "interval",
-      "delayMs": [420000, 720000],
+      "delayMs": [
+        420000,
+        720000
+      ],
       "choices": [
         {
           "action": "ambient-orb",
@@ -666,7 +1461,10 @@
       "type": "session",
       "event": "startup",
       "action": "startup-greeting",
-      "delayMs": [3000, 8000],
+      "delayMs": [
+        3000,
+        8000
+      ],
       "catchUpMs": 30000,
       "enterPet": true
     },
@@ -693,7 +1491,9 @@
       "id": "keyboard-typing-flurry",
       "type": "activity-burst",
       "action": "typing-flurry",
-      "sources": ["keyboard"],
+      "sources": [
+        "keyboard"
+      ],
       "windowMs": 8000,
       "minimumEvents": 32,
       "quietMs": 1800,
@@ -704,7 +1504,9 @@
       "id": "gamepad-combo",
       "type": "activity-burst",
       "action": "gamepad-combo",
-      "sources": ["gamepad"],
+      "sources": [
+        "gamepad"
+      ],
       "windowMs": 20000,
       "minimumEvents": 12,
       "quietMs": 2500,
@@ -724,7 +1526,13 @@
       "action": "weekday-greeting",
       "startTime": "08:00",
       "endTime": "09:30",
-      "weekdays": [1, 2, 3, 4, 5],
+      "weekdays": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
       "catchUpMs": 5400000,
       "enterPet": true
     },
@@ -734,7 +1542,10 @@
       "action": "weekend-greeting",
       "startTime": "09:30",
       "endTime": "11:30",
-      "weekdays": [6, 7],
+      "weekdays": [
+        6,
+        7
+      ],
       "catchUpMs": 7200000,
       "enterPet": true
     },
@@ -743,7 +1554,9 @@
       "type": "schedule",
       "action": "friday-release",
       "time": "18:00",
-      "weekdays": [5],
+      "weekdays": [
+        5
+      ],
       "catchUpMs": 14400000,
       "enterPet": true
     },
@@ -752,7 +1565,9 @@
       "type": "schedule",
       "action": "labor-day-greeting",
       "time": "11:45",
-      "dates": ["*-05-01"],
+      "dates": [
+        "*-05-01"
+      ],
       "catchUpMs": 28800000,
       "enterPet": true
     },
@@ -761,7 +1576,10 @@
       "type": "schedule",
       "action": "holiday-greeting",
       "time": "11:45",
-      "dates": ["*-01-01", "*-10-01"],
+      "dates": [
+        "*-01-01",
+        "*-10-01"
+      ],
       "catchUpMs": 28800000,
       "enterPet": true
     },

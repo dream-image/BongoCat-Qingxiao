@@ -15,7 +15,20 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [75, 90, 105, 125, 160, 240, 240, 160, 125, 105, 90, 75]
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
     },
     "hmph": {
       "file": "sprites/pet-hmph.webp",
@@ -25,7 +38,112 @@
       "columns": 4,
       "fps": 12,
       "loop": false,
-      "frameDurations": [90, 120, 150, 190, 260, 330, 330, 260, 190, 150, 120, 90]
+      "frameDurations": [
+        90,
+        120,
+        150,
+        190,
+        260,
+        330,
+        330,
+        260,
+        190,
+        150,
+        120,
+        90
+      ]
+    },
+    "attack-remind": {
+      "file": "sprites/pet-attack-remind.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
+    },
+    "demon-remind": {
+      "file": "sprites/pet-demon-remind.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        75,
+        90,
+        105,
+        125,
+        160,
+        240,
+        240,
+        160,
+        125,
+        105,
+        90,
+        75
+      ]
+    },
+    "attack-hmph": {
+      "file": "sprites/pet-attack-hmph.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        120,
+        150,
+        190,
+        260,
+        330,
+        330,
+        260,
+        190,
+        150,
+        120,
+        90
+      ]
+    },
+    "demon-hmph": {
+      "file": "sprites/pet-demon-hmph.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 12,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        90,
+        120,
+        150,
+        190,
+        260,
+        330,
+        330,
+        260,
+        190,
+        150,
+        120,
+        90
+      ]
     }
   },
   "actions": {
@@ -38,6 +156,17 @@
       "priority": 45,
       "cooldownMs": 60000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 40,
+        "set": {
+          "mood": "concerned"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 300000
+        }
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -69,7 +198,69 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateDialogues": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "dialogue": {
+            "delayMs": 100,
+            "durationMs": 2500,
+            "anchor": {
+              "x": 350,
+              "y": 158
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "休息。恢复体力也是战术。",
+                  "en-US": "Rest. Recovery is part of battle."
+                }
+              }
+            ]
+          }
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "dialogue": {
+            "delayMs": 120,
+            "durationMs": 2600,
+            "anchor": {
+              "x": 350,
+              "y": 158
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "再逞强，我就替你关掉它。",
+                  "en-US": "Keep pushing and I'll shut it down for you."
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-remind"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-remind"
+        }
+      ]
     },
     "hmph": {
       "label": {
@@ -80,6 +271,17 @@
       "priority": 34,
       "cooldownMs": 12000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 40,
+        "set": {
+          "mood": "annoyed"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 90000
+        }
+      },
       "audio": {
         "file": "@model/audio/common-voice-08-question.wem",
         "delayMs": 100,
@@ -102,7 +304,23 @@
             "weight": 1
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-hmph"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-hmph"
+        }
+      ]
     },
     "short-return-hmph": {
       "label": {
@@ -113,11 +331,25 @@
       "priority": 36,
       "cooldownMs": 21600000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 30,
+        "set": {
+          "mood": "annoyed"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 90000
+        }
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2400,
-        "anchor": { "x": 352, "y": 170 },
+        "anchor": {
+          "x": 352,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -134,7 +366,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-hmph"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-hmph"
+        }
+      ]
     },
     "mouse-fuss": {
       "label": {
@@ -145,11 +393,25 @@
       "priority": 32,
       "cooldownMs": 600000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 35,
+        "set": {
+          "mood": "annoyed"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 90000
+        }
+      },
       "dialogue": {
         "chance": 0.85,
         "delayMs": 100,
         "durationMs": 2200,
-        "anchor": { "x": 352, "y": 170 },
+        "anchor": {
+          "x": 352,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -166,7 +428,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-hmph"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-hmph"
+        }
+      ]
     },
     "work-break-reminder": {
       "label": {
@@ -177,11 +455,25 @@
       "priority": 46,
       "cooldownMs": 2700000,
       "interruptible": true,
+      "stateEffect": {
+        "when": "finished",
+        "priority": 50,
+        "set": {
+          "mood": "concerned"
+        },
+        "lifetime": {
+          "type": "duration",
+          "durationMs": 300000
+        }
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2600,
-        "anchor": { "x": 350, "y": 158 },
+        "anchor": {
+          "x": 350,
+          "y": 158
+        },
         "lines": [
           {
             "text": {
@@ -198,7 +490,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-remind"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-remind"
+        }
+      ]
     },
     "idle-hmph": {
       "label": {
@@ -213,7 +521,10 @@
         "chance": 0.45,
         "delayMs": 120,
         "durationMs": 2100,
-        "anchor": { "x": 352, "y": 170 },
+        "anchor": {
+          "x": 352,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -230,7 +541,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-hmph"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-hmph"
+        }
+      ]
     },
     "weekday-afternoon-hmph": {
       "label": {
@@ -245,7 +572,10 @@
         "chance": 0.9,
         "delayMs": 100,
         "durationMs": 2300,
-        "anchor": { "x": 352, "y": 170 },
+        "anchor": {
+          "x": 352,
+          "y": 170
+        },
         "lines": [
           {
             "text": {
@@ -262,7 +592,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-hmph"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-hmph"
+        }
+      ]
     },
     "monday-afternoon-reminder": {
       "label": {
@@ -277,7 +623,10 @@
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2400,
-        "anchor": { "x": 350, "y": 158 },
+        "anchor": {
+          "x": 350,
+          "y": 158
+        },
         "lines": [
           {
             "text": {
@@ -294,7 +643,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-remind"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-remind"
+        }
+      ]
     },
     "midnight-reminder": {
       "label": {
@@ -309,7 +674,10 @@
         "chance": 1,
         "delayMs": 100,
         "durationMs": 2600,
-        "anchor": { "x": 350, "y": 158 },
+        "anchor": {
+          "x": 350,
+          "y": 158
+        },
         "lines": [
           {
             "text": {
@@ -326,7 +694,23 @@
             "weight": 2
           }
         ]
-      }
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "attack-remind"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "demon-remind"
+        }
+      ]
     }
   },
   "triggers": [
@@ -374,7 +758,9 @@
       "id": "mouse-fuss",
       "type": "activity-burst",
       "action": "mouse-fuss",
-      "sources": ["mouse"],
+      "sources": [
+        "mouse"
+      ],
       "windowMs": 6000,
       "minimumEvents": 8,
       "quietMs": 1200,
@@ -385,7 +771,11 @@
       "id": "focused-work-reminder",
       "type": "active-session",
       "action": "work-break-reminder",
-      "sources": ["keyboard", "mouse", "gamepad"],
+      "sources": [
+        "keyboard",
+        "mouse",
+        "gamepad"
+      ],
       "afterMs": 3000000,
       "resetAfterMs": 480000,
       "repeatMs": 3000000,
@@ -406,7 +796,12 @@
       "action": "weekday-afternoon-hmph",
       "startTime": "14:00",
       "endTime": "16:30",
-      "weekdays": [2, 3, 4, 5],
+      "weekdays": [
+        2,
+        3,
+        4,
+        5
+      ],
       "catchUpMs": 9000000,
       "enterPet": true
     },
@@ -416,7 +811,9 @@
       "action": "monday-afternoon-reminder",
       "startTime": "14:00",
       "endTime": "16:30",
-      "weekdays": [1],
+      "weekdays": [
+        1
+      ],
       "catchUpMs": 9000000,
       "enterPet": true
     },
@@ -426,7 +823,15 @@
       "action": "midnight-reminder",
       "startTime": "23:00",
       "endTime": "00:30",
-      "weekdays": [1, 2, 3, 4, 5, 6, 7],
+      "weekdays": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
       "catchUpMs": 5400000,
       "enterPet": true
     }
