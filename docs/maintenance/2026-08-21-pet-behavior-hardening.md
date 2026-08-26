@@ -7,6 +7,8 @@
 > 对比基线：`fork/codex/pet-interactions`（`8cda5196dd80b556d58c587bb4f771703f54c941`）
 > 功能基线：`b0a47d290ac8fd2eb47d52c0d8472047376057d7`
 
+> 2026-08-26 补充：本文主体保留 2026-08-21 框架加固时的设计背景。当前清宵模型已经接入 27 套动画、主动/被动动作模组和本地 WEM 语音；主动目录动作可以直接接管进入、动作和退出阶段，并且在输入监听不可用时仍可手动触发。当前模型契约见 `2026-08-21-qingxiao-pet-action-modules.md`，雪碧图生产规则见 `2026-08-26-qingxiao-integrated-sprite-redraw.md`。
+
 ## 大体内容
 
 这轮改动为雪碧图模型增加了一套可选、配置驱动的宠物行为运行时，并系统加固了全局输入监听、按键状态、模型切换、手柄生命周期、实际渲染可见性、鼠标交互和 Sprite 播放调度。
@@ -17,7 +19,7 @@
 - 后续提交已为内置模型 `src-tauri/assets/models/qingxiao/model.json` 配置 `behaviors.pet` 和三个外部动作模组；当前实现详见 `2026-08-21-qingxiao-pet-action-modules.md`。
 - 原始物理输入身份 `inputId` 与当前模型使用的渲染键 `renderKey` 已分离。模型切换只暂停旧模型的视觉响应，不再伪造按键释放；新模型就绪后会重映射仍然按住的输入。
 - 键盘和手柄共享行为门禁，但使用不同来源的物理身份。手柄使用 `Gamepad:<name>`，避免与同名键盘键碰撞。
-- 宠物行为只有在输入监听可用、模型渲染完成、窗口实际可见，并且没有仍按住的键盘键或已追踪的手柄按钮/摇杆按键时才允许进入。
+- 被动进入和自主宠物行为只有在输入监听可用、模型渲染完成、窗口实际可见，并且没有仍按住的键盘键或已追踪的手柄按钮/摇杆按键时才允许运行；设置页和右键菜单的主动动作不依赖输入监听权限。
 - macOS 的 `rdev` 已改为仓库内本地依赖，修复了 Core Graphics 回调 ABI、跨线程回调约束、event tap 失效恢复、资源清理竞态和左右修饰键状态判断。
 - Sprite 播放现在提供可等待的结束结果、打断语义、返回动画、真实逐帧时长、按压态恢复以及按键气泡的统一调度。
 
@@ -120,10 +122,11 @@ pet-idle ──自主计时──> pet-action ──动画完成──> pet-idle
 - 自主动作按 `weight` 加权选择，遵守各自动作的 `cooldownMs`；有多个候选时尽量避免连续重复上一个动作。
 - `exitForInput()` 复用同一个 `exitingPromise`，同一轮退出不会被多个同时输入重复启动。
 - 进入或退出动画无法播放、被打断，或运行门禁失效时，控制器回到 `work-idle`；自主动作或交互动画无法启动时则回到 `pet-idle` 并重新安排自主计时。
+- 上述完整 `enter → action → exit` 生命周期用于被动、自主和指针交互。设置页或右键菜单发起的主动目录动作会从 `work-idle` 直接播放目标动作，也可以中断 `pet-entering`、`pet-action` 或 `pet-exiting`；这样第一次点击就有可见反馈，不会被进入/退出动画的等待窗口吞掉。
 
 #### 3.3 运行门禁
 
-进入或继续宠物行为需要同时满足：
+进入或继续被动、自主宠物行为需要同时满足：
 
 - 已配置 `behaviors.pet`；
 - 控制器已 `start()`；
@@ -135,6 +138,8 @@ pet-idle ──自主计时──> pet-action ──动画完成──> pet-idle
 - 当前没有仍按住的键盘键或已追踪的手柄按钮/`LeftThumb`/`RightThumb`。
 
 `mouseInteractions` 只控制 `hover`、`tap`、`stroke` 是否可触发，不决定自主宠物行为本身能否运行。
+
+主动目录动作使用较窄的门禁：宠物功能已启用、模型已完成渲染且窗口实际可见即可。原生输入监听为 `unavailable` 时，被动触发必须停止，但用户仍可从设置页或右键菜单主动播放动作。
 
 ### 4. 物理输入身份与渲染映射分离
 
@@ -164,7 +169,7 @@ pet-idle ──自主计时──> pet-action ──动画完成──> pet-idle
 
 #### 4.3 输入监听失效
 
-监听真正进入 `unavailable` 时与模型切换不同：此时已经无法保证后续能收到真实 KeyRelease，所以必须主动释放已知键盘和鼠标状态，清除自动释放定时器，并把宠物行为门禁设为不可用。
+监听真正进入 `unavailable` 时与模型切换不同：此时已经无法保证后续能收到真实 KeyRelease，所以必须主动释放已知键盘和鼠标状态，清除自动释放定时器，并把被动宠物行为门禁设为不可用。主动目录动作仍可使用；一次主动动作成功结束后回到宠物待机还是工作态，取决于运行时是否仍掌握可信的物理输入状态。
 
 ### 5. Gamepad 生命周期
 
@@ -207,7 +212,7 @@ pet-idle ──自主计时──> pet-action ──动画完成──> pet-idle
 - 只有确实存在交互或当前宠物动画需要阻止输入时才获取 pointer capture。
 - 手势超过 tap 阈值、又没有仍可成立的 stroke 时，把控制权移交给 `appWindow.startDragging()`。
 - 按住 Shift 或点击未配置交互的区域时保持原有拖窗行为。
-- `pet-entering`、`pet-exiting` 和正在播放交互动作时不会重复接受新的宠物交互。
+- `pet-entering`、`pet-exiting` 和正在播放交互动作时不会重复接受新的指针手势；设置页和右键菜单的主动目录动作不受这条限制，可以接管当前阶段。
 
 页面入口 `src/pages/main/index.vue` 只负责绑定 pointer 事件和普通拖窗后备逻辑；手势判定不要重新塞回页面组件。
 
@@ -395,7 +400,7 @@ CARGO_TARGET_DIR=/tmp/bongocat-comment-doc-check cargo check --workspace
 
 Vite 仅报告既有的 chunk 大小提示。Rust 检查仅保留 vendored `rdev` 中既有的 unreachable pattern、`static_mut_refs` 和 `block v0.1.6` future-incompatibility 警告，没有构建错误。
 
-当前内置模型未配置 `behaviors.pet`，所以这轮验证覆盖的是框架、类型、构建和输入状态链路，不代表已经验收某一套实际宠物行为 Sprite。以后加入模型行为时，仍需对真实 enter/idle/action/interaction/exit 动画做应用内验收。
+上面这组命令是 2026-08-21 框架提交时的验证记录；当时内置模型尚未配置 `behaviors.pet`。截至 2026-08-26，清宵已经接入实际模型包并完成独立校验：27 个 animation、39 个 module action、39 个 module trigger、7 个本地 audio，零错误、零警告；Wwise Opus/WEM 的 4 个解析测试也已通过。真实交互仍应继续覆盖首次主动点击、重复点击、完整被动生命周期、输入权限不可用、模型切换和音频清理。
 
 ### 13. 后续修改禁区
 

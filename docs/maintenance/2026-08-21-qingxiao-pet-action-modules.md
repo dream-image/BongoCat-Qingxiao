@@ -1,10 +1,11 @@
 # 清宵宠物动作模组维护记录
 
 - 记录时间：2026-08-21 06:05:12 CST（Asia/Shanghai）
+- 最近更新：2026-08-26 15:22:45 CST（Asia/Shanghai）
 - 工作分支：`codex/pet-behavior-hardening`
 - 大体内容：在既有按键模型之上增加可导入的宠物动作模组、主动右键菜单、独立对白气泡，以及启动问候、久别归来、输入爆发、连续工作、每日时段等可扩展被动触发器；清宵动作资源继续使用逐帧稳定性门禁。
 
-> 2026-08-26 更新：清宵的正式雪碧图已经改为“人物、常驻飘带、表情和口型逐帧统一重画”，不再采用本文早期记录的局部程序合成路线。当前美术生产规则和复现命令以 [2026-08-26 清宵一体化雪碧图重画记录](./2026-08-26-qingxiao-integrated-sprite-redraw.md) 为准；本文后续有关 ROI、donor 和静态区拼接的内容只保留为历史设计记录。
+> 2026-08-26 更新：清宵的正式 27 套雪碧图已经改为 canonical-first 生产。完整重画只作为姿势、表情和特效 donor，人物、古琴、常驻飘带、位置、尺寸和材质来自统一 canonical。当前美术生产规则和复现命令以 [2026-08-26 清宵一体化雪碧图重画记录](./2026-08-26-qingxiao-integrated-sprite-redraw.md) 为准；本文早期有关整帧重画或旧程序合成的数据只保留为历史记录。
 
 ## 本次实现
 
@@ -15,8 +16,9 @@
 - `src/utils/pet-behavior-module.ts`：读取、验证和规范化模块；处理命名空间、本地化、动画引用及数量边界。
 - `src/utils/pet-behavior-scheduler.ts`：计算本地日期、星期、时间点和补偿窗口，不持有播放器状态。
 - `src/utils/pet-behavior-passive.ts`：把会话、真实可见性和输入边沿转换为带代次、截止时间和去重键的 passive occurrence。
-- `src/utils/pet-behavior.ts`：统一处理进入/退出、优先级、冷却、被动调度、手势、主动请求和对白生命周期。
-- `src/utils/sprite.ts`：合并模块动画、限制资源预算、播放动作，并绘制独立对白气泡。
+- `src/utils/pet-behavior.ts`：统一处理进入/退出、优先级、冷却、被动调度、手势、主动请求、对白和音频生命周期。
+- `src/utils/sprite.ts`：合并模块动画、校验单张资源预算、播放动作，并绘制独立对白气泡。
+- `src/utils/sprite-audio.ts`、`src/utils/wwise-opus.ts`：有界读取本地音频，直接解析并播放受支持的 Wwise Opus WEM。
 - `src/composables/usePetActionMenu.ts`：把可用的 `manual` 触发器转换为宠物右键二级菜单。
 - `src/pages/main/index.vue`：只在宠物窗口装配菜单；托盘菜单不读取宠物运行时。
 - `scripts/build_qingxiao_pet_sprites.py`：旧版局部程序合成器，仅能显式传入 `--legacy-procedural` 做历史排查；不得再用于覆盖当前正式重画资源。
@@ -28,14 +30,14 @@
 一个模块由 `version`、`id`、`displayName`、`actions` 和 `triggers` 组成；只有包含本地雪碧资源时才需要可选的 `animations`。模块内的本地标识会自动转换为 `moduleId/localId`，所以不同模块可以安全复用相同局部名称。
 
 - 本地动画引用写局部名称；复用顶层模型动画写 `@model/<animation>`。
-- action 至少包含 animation 或 dialogue 之一，可同时包含两者。
+- action 至少包含 animation 或 dialogue 之一，可同时包含两者；`audio` 只能作为已有动作的可选增强，不能单独决定动作生命周期。
 - action 的 cooldown 只在真正开始执行时写入；失效或被拒绝的请求不消耗冷却。
 - dialogue 是独立单槽，不进入按键气泡队列；延迟显示受 playback generation 保护，切模型或按键打断后不会冒出旧台词。
 - 模块源、动画文件和引用必须存在且位于模型 canonical 根目录内；任一模块错误会让整个模型 fail-fast，不能静默跳过半个模块。
 
 目前支持的触发器：
 
-- `manual`：出现在宠物右键二级菜单，可从工作形态先进入宠物形态再执行。
+- `manual`：出现在宠物右键二级菜单，也可由设置页使用同一 catalog 预览。从工作态触发时直接播放目标动作，并可立即打断尚未结束的进入、当前动作或退出动画。
 - `pointer`：绑定已声明 hit area 的 hover、tap 或 stroke。
 - `interval`：只在 `pet-idle` 开始完整计时，动作完成后重新抽取完整间隔。
 - `idle`：从本轮最后一个已追踪输入释放后累计，按 idle epoch 去重。
@@ -56,21 +58,21 @@
 
 键盘/已追踪手柄输入和系统退出永远高于宠物动作。其余来源依次为 manual、pointer、active-session、schedule、visibility-return、session、activity-burst、daily-window、idle、interval，每档间隔 100，再叠加 action 自身 0…99 的 priority，模型局部值不会反转来源优先级。
 
-- 进入和退出动画不可被普通动作抢占。
-- 工作形态最多保存一个待执行主动请求；进入完成后重新按优先级选择。
+- 自动/被动动作仍遵守完整进入和退出生命周期；明确的 `manual` 请求优先保证即时视觉反馈，可以接管进入或退出播放。
+- 工作形态的主动请求不再等待完整 `pet-enter`。手动动画第 0 帧必须是 pet canonical，并应在前几个短帧内产生可读变化。
 - 当前动作只有在声明为 interruptible 且新请求优先级更高时才会被抢占。
-- 手动/指针即时请求使用一个 pending 槽；已发现的 schedule 和其他被动 occurrence 进入独立的 256 项有界优先队列，不会被后来的单槽请求覆盖。同一 trigger 只保留最新一次尚未执行的 occurrence。
+- 指针和被动请求仍按抢占或 pending 规则仲裁；已发现的 schedule 和其他被动 occurrence 进入独立的 256 项有界优先队列，不会被后来的请求覆盖。同一 trigger 只保留最新一次尚未执行的 occurrence。
 - `catchUpMs` 只决定一个 occurrence 能否在半开区间 `[dueAt, expiresAt)` 内被及时发现；已在窗口内入队的事件可以等前一个长动作完成，不会在队列中被二次过期。
 - 打开原生右键菜单会冻结 activation、interval/idle 和新被动引擎的单调计时，关闭后恢复剩余时间；wall-clock `schedule`/`daily-window` 不平移现实时间，只在关闭时仍位于 catch-up/window 内才补发现。
-- 监听不可用、渲染未就绪、窗口或 WebView 实际不可见、仍有已追踪键盘/手柄输入时，控制器不会进入宠物形态。鼠标拖拽/长按不禁用主动 pointer 交互，也不暂停已经开始的动画；它只阻止新的被动动作启动，并在释放后从新的 idle/interval 周期继续。
+- 监听不可用时被动调度不会进入宠物形态，但可见、已启用且渲染完成的模型仍允许主动菜单/设置页动作；动作正常结束后停在可继续点击的 `pet-idle`。已知有物理键盘/手柄输入按住时仍退出工作态。鼠标拖拽/长按不禁用主动 pointer 交互，也不暂停已经开始的动画；它只阻止新的被动动作启动，并在释放后从新的 idle/interval 周期继续。
 
 ## 右键菜单资源所有权
 
 宠物窗口每次右键都根据当前 locale、cooldown 和运行状态重新生成菜单。整棵瞬时菜单使用带稳定 id 的 raw options，只创建一个 root `Menu` Resource；`popup()` 结束后由 `finally` 关闭 root。不要提前用 `MenuItem.new()` 构造子项，否则关闭 root 不会释放这些独立 Resource。
 
-菜单 action 回调只记录所选 action；原生菜单关闭、session 解冻后才真正提交，避免菜单打开期间的 hover、自动动作和点击动作互相抢占。
+菜单 action 回调只记录所选 action；原生菜单关闭、session 解冻后立即提交，避免菜单打开期间的 hover、自动动作和点击动作互相抢占。提交后的主动动作不会再等待隐藏 pending 或完整入场动画。
 
-方向键和回车通过原生菜单导航时，全局输入 hook 仍只记录物理 held 状态，不显示按键贴图/气泡、不播放工作动画、也不作废菜单 revision。若选择回调早于 keyup 且仍在工作形态，manual 请求留在单槽，最后一个导航键释放后立即进入，不重等 `activationDelayMs`；已经处于宠物态时按正常抢占/排队规则执行，最后 keyup 负责恢复被动计时。
+方向键和回车通过原生菜单导航时，全局输入 hook 仍只记录物理 held 状态，不显示按键贴图/气泡、不播放工作动画、也不作废菜单 revision。菜单关闭后 manual 请求直接接管播放；最后一个导航键释放只负责恢复后续被动计时，不再作为首次动作启动条件。
 
 ## 清宵当前动作
 
@@ -80,9 +82,9 @@
 
 - `modules/lively`：17 个 action / 17 个 trigger；除惊醒、凝云珠、流泉扫弦、眨眼挥手和节日问候外，还包含启动问候、6小时/三日级别的久别回归、快速键盘与手柄输入回应、工作日/周末早晨窗口。
 - `modules/tsundere`：9 个 action / 9 个 trigger；包含短时离开后的傲娇回应、连续点击或晃动鼠标的反应、50 分钟工作提醒、五分钟 idle，以及工作日下午和跨午夜深夜窗口。
-- `modules/routine`：12 个 action / 11 个 trigger；复用基础摸头、弹琴、休息、梦境与白色化形，并按 45 秒、10 分钟、20 分钟和深度 idle 分阶段进入好奇/打盹/梦境，另有午间休息与晚间琴音窗口。
+- `modules/routine`：13 个 action / 13 个 trigger；复用基础摸头、弹琴、休息、梦境、白色化形与紫色心魔形态，并按 45 秒、10 分钟、20 分钟和深度 idle 分阶段进入好奇/打盹/梦境，另有午间休息与晚间琴音窗口。
 
-三份外部 module.json 共 38 个 action / 37 个 trigger；顶层 5 个兼容 interactions 会再规范化成一个不可由外部命名的内部模块。统一运行时 catalog 因此为 26 个 animation、4 个 module、43 个 action、42 个 trigger；其中新被动类型为 session 1、visibility-return 3、activity-burst 3、active-session 1、daily-window 7。自动对白保持较低几率或长冷却，避免和分阶段 idle/周期动作叠加成高频打扰。
+三份外部 `module.json` 共 39 个 action / 39 个 trigger；顶层 5 个兼容 pointer interactions 会再规范化成一个不可由外部命名的内部模块。模型共加载 27 个 animation；控制器内部合并后为 4 个 module、44 个 action、44 个 trigger。自动对白保持较低几率或长冷却，避免和分阶段 idle/周期动作叠加成高频打扰。
 
 动作雪碧图始终从 `sprites/idle.webp` frame 0 的 512×512 production canonical 重组。眼睛、左右手/袖和程序特效分别使用固定 ROI；动作区之外必须逐像素等于 canonical。特效按当前 pose alpha 保护，不能只保护待机轮廓。
 
@@ -92,8 +94,9 @@
 
 - 模型 manifest 最大 1 MiB；单个 module manifest 最大 256 KiB。
 - 单模组最多 128 个 action / 256 个 trigger；外部模块由 loader 完整校验，和顶层兼容行为合并时只补充检查整个模型 512 个 action / 256 个 trigger 的总预算及跨模组指针冲突。
-- 模型最多 96 个动画；单张雪碧图最多 16 MiP；模型累计最多 64 MiP；图片最多四路并发加载。
-- 图片在创建 `HTMLImageElement` 前先有界读取文件头并占用像素预算，解码后再次核对实际尺寸。
+- 模型最多 96 个动画；单张雪碧图最多 16 MiP；全模型累计像素只写入校验报告用于评估内存，不再设置总量硬上限；图片最多四路并发加载。
+- 每个音频文件最大 8 MiB，一个模型最多 64 个去重音频文件；Wwise Opus WEM 限 codec version 1、`0x3041`、mapping 0、48 kHz mono/stereo 和最长 30 秒。
+- 图片在创建 `HTMLImageElement` 前先有界读取文件头并校验单张像素预算，解码后再次核对实际尺寸。
 - 模型切换通过 generation 停止旧模块读取并主动取消旧图片加载。
 - 模型加载错误同时写入持久日志；窗口 resize 优先等待下一帧，但锁屏或隐藏 WebView 暂停 rAF 时使用 100ms 兜底，避免 `modelReady` 永久停在 false。
 - Rust 对 model/module/animation 文件做 canonical 根目录检查；导入过程拒绝符号链接和特殊文件，失败只回滚本次原子创建的目标目录。
@@ -116,7 +119,7 @@
 
 手势动作只沿同一 donor 姿势族单向进入并严格镜像返回，峰值停留期间由法球、音符、星光、气云和挥手线继续推进。构建门现在同时检查包含 canonical 端点的绝对主手组件质心，以及相邻袖臂 alpha silhouette XOR；这两项分别防止端点跳帧和“质心接近但整条袖子瞬换”。最终 14 张雪碧图均通过逐帧眼态、静态区、特效遮挡、透明区、边缘、无损解码、对称和原速视觉验收。
 
-扩帧后的 26 个动画累计为 65,536,000 像素（62.5 MiP），低于 67,108,864 像素的模型级上限；剩余 1,572,864 像素约等于 6 个 512×512 帧。后续增加动作应优先复用现有动画或空格，不得在未重新评估预算时继续扩表。
+当时的 26 个动画累计为 65,536,000 像素（62.5 MiP），这组数值只保留为历史快照。当前加入心魔动作后共有 27 个动画、69,730,304 像素（66.5 MiP）；运行时已经取消旧的全模型 64 MiP 硬上限，仍保留 96 个动画和单张 16 MiP 上限。后续扩展仍应评估启动时间、内存和包体，并优先复用语义相同的动画。
 
 ## 2026-08-22 00:41 CST：气泡反馈、字体与公开说明
 
@@ -127,3 +130,19 @@
 macOS 新款 Fn/地球键可能同时上报 `Function` 和 `Unknown(179)`。前端输入入口只在 macOS 忽略这个明确的伴生 `Unknown(179)` 事件，保留正常 `Function` 输入，避免同一次物理按键出现 `Fn` 与 `Unknown` 两组气泡。
 
 README 已改为本 fork 的独立项目说明，并直接复用 `resources/cover.png` 展示清宵预览。文档明确标注本仓库来自开源项目 `ayangweb/BongoCat`，不是上游官方发行版，同时区分 MIT 代码许可证与角色形象、远程字体等第三方素材的授权边界。
+
+## 2026-08-26 15:22 CST：主动动作即时反馈与本地 WEM 语音
+
+设置页预览和右键菜单现在共用同一份运行时 catalog。明确的 manual 请求从 `work-idle` 直接开始目标动作；在 `pet-entering`、`pet-action` 或 `pet-exiting` 中再次点击会立即中断旧 playback 并开始新动作，不再先等待 1.2 秒进入动画或把请求留在不可见 pending。自动与被动触发仍保留完整进入动画。
+
+输入监听未授权时，控制器无法安全运行空闲、活跃度和日程等被动调度，但主动操作只要求模型可见、启用且渲染完成。主动动作正常结束后直接落到可再次操作的 `pet-idle`；只有运行时明确知道仍有物理输入按住，才播放退出动画回到工作态。
+
+action 新增可选 `audio`：
+
+- `file` 不带前缀时相对当前模块，`@model/` 表示模型根目录共享资源；
+- `chance` 和 `volume` 范围为 `(0, 1]`，`delayMs` 为非负毫秒值；
+- 音频不能独立替代 animation/dialogue，也不决定动作完成时间；
+- 当前清宵 8 个 action 复用 7 个 WEM 文件，模型加载会在动作触发前完成路径、大小和容器校验；
+- “动作音效”开关同时控制 Sprite 与 Live2D；新动作、输入打断、切模型和销毁会停止旧语音。
+
+当前解析器直接支持新版 Wwise Opus WEM，不做离线转码。自动测试覆盖 7 个内置文件、末尾 RIFF padding 兼容、错误 chunk/packet/mapping 拒绝和解码时长上限，共 4 项测试全部通过。
