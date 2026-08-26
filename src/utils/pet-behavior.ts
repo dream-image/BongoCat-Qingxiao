@@ -139,6 +139,8 @@ export interface PetPlaybackDriver {
   play: (animation: string, options?: PetPlayOptions) => PetPlaybackHandle | null
   speak?: (payload: PetSpeechPayload) => void
   clearSpeech?: () => void
+  playAudio?: (payload: PetAudioPayload) => void
+  stopAudio?: () => void
 }
 
 export interface PetSpeechPayload {
@@ -148,6 +150,11 @@ export interface PetSpeechPayload {
     x: number
     y: number
   }
+}
+
+export interface PetAudioPayload {
+  file: string
+  volume: number
 }
 
 export type PetActionSource
@@ -315,6 +322,7 @@ export class PetBehaviorController {
   private scheduleTimer: PetBehaviorTimer | undefined
   private speechDelayTimer: PetBehaviorTimer | undefined
   private speechClearTimer: PetBehaviorTimer | undefined
+  private audioDelayTimer: PetBehaviorTimer | undefined
   private dialogueOnlyTimer: PetBehaviorTimer | undefined
   // lifecycleGeneration 作废旧定时器，playbackGeneration 作废旧动画回调；两者分开避免
   // 单纯切换动画时误伤当前生命周期，也避免 clearTimeout 竞争下的陈旧回调改状态。
@@ -1166,15 +1174,21 @@ export class PetBehaviorController {
     if (this.currentState === 'work-idle') {
       if (!enterPet) return false
 
-      if (isExplicitAction) {
-        this.pendingAction = request
-      } else if (!this.queuePendingAction(request)) {
-        return false
-      }
-
       // schedule/manual 可以主动唤醒宠物；保留 schedule 扫描，只撤掉会与进入动画竞争的计时器。
       this.clearActivationTimer()
       this.clearPassiveTimers()
+
+      if (isExplicitAction) {
+        // 用户明确点击的动作必须立即给出画面反馈，不能先完整等待 enter 动画再消费 pending。
+        // 动作首帧本身就是 pet canonical，因此可直接接管播放；自动触发仍保留完整入场过渡。
+        this.pausedActivationRemainingMs = void 0
+        this.setState('pet-idle')
+
+        return this.startActionRequest(request)
+      }
+
+      if (!this.queuePendingAction(request)) return false
+
       const entered = this.enterPetMode(source)
 
       if (!entered && this.pendingAction === request) this.pendingAction = void 0
@@ -1184,9 +1198,11 @@ export class PetBehaviorController {
 
     if (this.currentState === 'pet-entering') {
       if (isExplicitAction) {
-        this.pendingAction = request
+        // 再次点击应打断尚未结束的入场，而不是只替换一个用户看不见的 pending 槽。
+        this.pendingAction = void 0
+        this.setState('pet-idle')
 
-        return true
+        return this.startActionRequest(request)
       }
 
       return allowPending && this.queuePendingAction(request)
@@ -1199,9 +1215,12 @@ export class PetBehaviorController {
     if (this.currentState === 'pet-exiting') {
       if (!isExplicitAction || !enterPet) return false
 
-      this.pendingAction = request
+      // 退出动画期间的主动点击同样立即接管；旧退出 Promise 会因 playback generation 失效。
+      this.pendingAction = void 0
+      this.exitingPromise = null
+      this.setState('pet-idle')
 
-      return true
+      return this.startActionRequest(request)
     }
 
     if (isExplicitAction) return this.startActionRequest(request)
@@ -1262,6 +1281,7 @@ export class PetBehaviorController {
 
       this.commitActionStart(request)
       this.showActionDialogue(request.action, generation)
+      this.playActionAudio(request.action, generation)
       this.scheduleDialogueOnlyCompletion(request.action, generation)
 
       return true
@@ -1277,6 +1297,7 @@ export class PetBehaviorController {
 
     this.commitActionStart(request)
     this.showActionDialogue(request.action, playback.generation)
+    this.playActionAudio(request.action, playback.generation)
     this.finishPetPlayback(playback)
 
     return true
@@ -1838,7 +1859,14 @@ export class PetBehaviorController {
       if (activeAction?.source === 'manual'
         && this.canRunManualAction()
         && this.behaviorConfig) {
-        void this.exitForInput()
+        if (this.activeKeyboardInputs.size > 0) {
+          // 已知仍有物理输入时必须回工作态，不能让主动动作遮住正在进行的键盘反馈。
+          void this.exitForInput()
+        } else {
+          // 输入监听尚未授权时无法运行被动调度，但主动菜单仍应落到可再次点击的 pet-idle。
+          // 否则每次动作后都会额外播放 exit，下一次点击又被 enter/exit 生命周期延迟。
+          this.setState('pet-idle')
+        }
 
         return
       }
@@ -1936,6 +1964,33 @@ export class PetBehaviorController {
     this.speechDelayTimer = delayTimer
   }
 
+  private playActionAudio(action: PetRuntimeAction, generation: number) {
+    const audio = action.audio
+
+    if (!audio || !this.driver.playAudio || this.nextRandom() >= audio.chance) return
+
+    const play = () => {
+      if (generation !== this.playbackGeneration || this.destroyed) return
+
+      this.driver.playAudio?.({ file: audio.file, volume: audio.volume })
+    }
+
+    if (audio.delayMs === 0) {
+      play()
+
+      return
+    }
+
+    const delayTimer = this.clock.setTimeout(() => {
+      if (this.audioDelayTimer !== delayTimer || generation !== this.playbackGeneration) return
+
+      this.audioDelayTimer = void 0
+      play()
+    }, audio.delayMs)
+
+    this.audioDelayTimer = delayTimer
+  }
+
   private scheduleDialogueOnlyCompletion(action: PetRuntimeAction, generation: number) {
     // 没有动画的动作仍要占据一次完整对白周期，否则同帧就回 idle，会让队列并发覆盖气泡。
     const duration = action.dialogue
@@ -1960,12 +2015,18 @@ export class PetBehaviorController {
       this.clock.clearTimeout(this.speechClearTimer)
       this.speechClearTimer = void 0
     }
+    if (this.audioDelayTimer !== void 0) {
+      this.clock.clearTimeout(this.audioDelayTimer)
+      this.audioDelayTimer = void 0
+    }
     if (this.dialogueOnlyTimer !== void 0) {
       this.clock.clearTimeout(this.dialogueOnlyTimer)
       this.dialogueOnlyTimer = void 0
     }
 
     this.driver.clearSpeech?.()
+    // 对白和配音属于同一次动作反馈；动作被输入、切模或新动作打断时必须一起收口。
+    this.driver.stopAudio?.()
   }
 
   private invalidateActionMenu() {

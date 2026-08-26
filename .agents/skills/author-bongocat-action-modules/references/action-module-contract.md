@@ -9,6 +9,8 @@
 - `src/utils/pet-behavior-module.ts`：模块、action、dialogue、trigger 的严格白名单与默认值
 - `src/utils/pet-behavior-scheduler.ts`：本地日期、星期、时刻和跨午夜窗口
 - `src/utils/pet-behavior-passive.ts`：会话、回归、活跃度、持续工作与每日窗口状态
+- `src/utils/model-runtime.ts`：行为控制器与 Sprite 渲染器之间的动作、对白和音频桥接
+- `src/utils/sprite-audio.ts`、`src/utils/wwise-opus.ts`：本地音频加载、WEM 解析和播放限制
 - `src/composables/usePetActionMenu.ts`：主动二级菜单和被动三级菜单
 - `src-tauri/assets/models/qingxiao/`：当前可运行样例
 
@@ -95,6 +97,11 @@ Hit area 支持：
       "priority": 30,
       "cooldownMs": 10000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/welcome.wem",
+        "delayMs": 100,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -146,6 +153,19 @@ Action 的 `animation`：
 
 频繁被动 action 应降低 `chance`，避免每次都说话。对白与按键气泡使用不同槽位，动作被打断、模型切换或销毁时必须由现有运行时清理。
 
+## 动作语音
+
+`audio` 为 action 的可选增强项，不能单独替代 `animation`/`dialogue` 来决定动作生命周期：
+
+- `file`：不带前缀时相对当前 `module.json`；`@model/audio/...` 表示模型根目录共享音频。
+- `chance`：`(0, 1]`，默认 1。
+- `delayMs`：非负，默认 0；通常与气泡的 `dialogue.delayMs` 保持一致。
+- `volume`：`(0, 1]`，默认 1。
+
+应用可直接读取 Wwise Opus `.wem`，无需把源文件转成 WAV/MP3。当前直接解码链路支持 codec version 1、`0x3041`、mapping 0、48 kHz 的 mono/stereo WEM；每个音频文件最多 8 MiB，WEM 最长 30 秒，一个模型最多引用 64 个去重后的音频文件。非 WEM 文件交给 WebView 原生音频能力，但仍受路径、存在性、普通文件和 8 MiB 上限校验。
+
+模型加载会先验证所有引用；单个可选音频播放失败只记录警告，不能打断人物动画。播放仍受设置中的“动作音效”开关控制，新动作、输入打断、切换模型或销毁会停止旧音频。带语音的 action 应让气泡文本与录音逐字对应，避免随机台词和固定录音错位。
+
 ## Trigger 类型
 
 所有 trigger 的 `id` 在模块内唯一，`action` 只能引用同模块 action。
@@ -179,6 +199,10 @@ Pointer 约束：
 - 被动动作是“被动动作 → trigger 类型 → action”。
 - passive 菜单项用于用户预览/主动触发对应 action，不会伪造被动 occurrence。
 - action 冷却或运行状态不应永久禁用菜单；菜单每次打开会根据当前状态重建。
+- `manual` 明确操作不受 action 冷却限制。它从 work-idle 触发时直接开始目标动作，并可打断尚未结束的 enter/exit 或当前 action；不能先塞入不可见 pending 再等待完整生命周期。
+- 因此所有可手动触发的动画第 0 帧必须是 pet canonical，并应在前几个短帧内产生可读变化；不要用长时间 canonical 头尾填充制造“第一次点击无效”。自动/被动 `enterPet` 仍完整播放 enter 动画。
+- 输入监听未授权时，被动触发器不会运行，但可见且已加载的模型仍允许手动动作；正常结束后落到可继续点击的 pet-idle。若运行时已知有物理输入按住，则仍应退出到工作态。
+- 原生右键菜单在打开期间冻结被动计时，动作在 popup 关闭收尾时提交；设置页预览通过同一 catalog 直接触发。两条入口都必须第一次点击成功。
 
 每个希望用户主动执行的 action 都需要 `manual` trigger。每个被动 action 至少需要一个非 manual trigger，才能出现在被动目录并自动运行。
 
@@ -188,7 +212,8 @@ Pointer 约束：
 - 最多 64 个 module；单模块最多 128 animation、128 action、256 trigger。
 - 合并后模块 action 最多 512，trigger 最多 256。
 - 模型合并后最多 96 个 animation。
-- 单张 sheet 最大 16 MiP，全部 sheet 最大 64 MiP。
+- 单张 sheet 最大 16 MiP；全模型累计像素只进入校验报告用于评估内存，不再设置总量硬上限。
+- 每个音频文件最大 8 MiB，一个模型最多 64 个去重音频引用；Wwise Opus WEM 最长 30 秒。
 - 所有 id 最长 80，须匹配小写/数字开头的安全 id 规则；避免 `__proto__`、`prototype`、`constructor`。
 - 路径最长 512，只允许模型内安全相对路径；禁止 scheme、绝对路径、空段、`.`、`..` 和符号链接越界。
 - 模组只能包含数据和本地资源，不能包含可执行脚本或表达式 DSL。

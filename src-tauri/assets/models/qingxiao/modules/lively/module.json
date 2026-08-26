@@ -58,6 +58,11 @@
       "priority": 38,
       "cooldownMs": 4500,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-14-hm.wem",
+        "delayMs": 80,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 80,
@@ -71,20 +76,6 @@
             "text": {
               "zh-CN": "嗯？",
               "en-US": "Hm?"
-            },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "你叫我？",
-              "en-US": "Did you call me?"
-            },
-            "weight": 2
-          },
-          {
-            "text": {
-              "zh-CN": "……吓我一跳。",
-              "en-US": "...You startled me."
             },
             "weight": 1
           }
@@ -170,6 +161,11 @@
       "priority": 32,
       "cooldownMs": 15000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-16-arrival.wem",
+        "delayMs": 90,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 90,
@@ -181,17 +177,10 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "早。",
-              "en-US": "Morning."
+              "zh-CN": "你来了。",
+              "en-US": "You're here."
             },
-            "weight": 2
-          },
-          {
-            "text": {
-              "zh-CN": "今天也要认真。",
-              "en-US": "Do your best today."
-            },
-            "weight": 3
+            "weight": 1
           }
         ]
       }
@@ -240,6 +229,11 @@
       "priority": 35,
       "cooldownMs": 21600000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-16-arrival.wem",
+        "delayMs": 90,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 90,
@@ -248,17 +242,10 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "你来了。今日也由我陪着。",
-              "en-US": "You're here. I'll keep you company today."
+              "zh-CN": "你来了。",
+              "en-US": "You're here."
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "早些开始，便能早些听琴。",
-              "en-US": "Begin early, and you may hear the strings sooner."
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
       }
@@ -272,6 +259,11 @@
       "priority": 34,
       "cooldownMs": 21600000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-17-safe-return.wem",
+        "delayMs": 100,
+        "volume": 0.9
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -280,17 +272,10 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "舍得回来了？云都等散了一回。",
-              "en-US": "So you finally returned? Even the clouds dispersed once."
+              "zh-CN": "路上没遇到麻烦吧？",
+              "en-US": "You didn't run into trouble on the way, did you?"
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "几日不见，倒也没忘了你。",
-              "en-US": "A few days apart, yet I haven't forgotten you."
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
       }
@@ -336,6 +321,11 @@
       "priority": 27,
       "cooldownMs": 900000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-12-praise.wem",
+        "delayMs": 100,
+        "volume": 0.88
+      },
       "dialogue": {
         "chance": 0.75,
         "delayMs": 100,
@@ -344,17 +334,10 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "指下生风，倒有几分琴意。",
-              "en-US": "Your fingers stir the wind. Almost like playing strings."
+              "zh-CN": "做得很好。",
+              "en-US": "Well done."
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "这么急？先把气息稳住。",
-              "en-US": "Such haste? Steady your breath first."
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
       }

@@ -9,8 +9,11 @@ Choose one approved transparent RGBA frame as canonical. It owns:
 - all static colors and textures
 - the alpha silhouette
 - transparent padding
+- every permanent attached element and its depth relationship to the body and prop
 
 Never average several AI frames into the canonical source. Never independently fit, center, color-match, or scale each timeline frame.
+
+Do not split a visually integrated character into a base sheet plus a separately generated permanent overlay. Ribbons, tails, wings, ornaments, back pieces, and similar elements must share the canonical material, lighting, position, and occlusion in every frame. A reference image approved as a character template does not make its background, composition, or temporary effect part of the model.
 
 ## Image Generation Prompts
 
@@ -36,6 +39,8 @@ Edit the canonical desktop-pet character into the requested transformed appearan
 
 Treat these outputs as donors. Deterministic compositing owns final consistency.
 
+A generated multi-frame strip is never a production timeline merely because its grid and poses look plausible. Whole-frame stabilization can reduce bounding-box jitter but cannot remove frame-to-frame redraw of line art, facial proportions, texture, or material. Extract only approved local pose, expression, or effect donors and rebuild the final timeline from the immutable canonical.
+
 ## Idle Recipe
 
 1. Select one canonical open-eye frame.
@@ -50,6 +55,22 @@ Acceptance:
 - outside-eye maximum RGBA delta equals zero
 - hands, prop, torso, hair, and alpha geometry equal canonical
 - no half-open opacity blend, gray iris, or double eyelid
+
+## Expression And Mouth Recipe
+
+Define separate ROIs for eyes, brows, cheeks, and lips when the action requires emotion or speech. These ROIs are allowed to change; the rest of the face is not.
+
+1. Keep head position, face outline, hairline, skin lighting, and feature proportions canonical.
+2. Build blink, smile, surprise, pout, and mouth-open states as small deterministic layers or locally clipped donors.
+3. Use real intermediate mouth/eye states when a change is large enough to pop at normal display size.
+4. Never replace the entire face or head to obtain one expression, and never let a mouth donor alter nose, jaw, earrings, hair, or costume.
+
+Acceptance:
+
+- all pixels outside declared expression ROIs equal canonical within the protected head region
+- eyes and lips change only when required by the action semantics
+- normal awake idle remains open-eyed; closed eyes are reserved for blink, sleep, or an intentional expression
+- no feature-size drift, face-shape breathing, skin-tone flash, or lip position jump
 
 ## Two-Hand Action Recipe
 
@@ -83,7 +104,7 @@ Acceptance:
 - at least two distinct active poses exist for a visible gesture
 - both exclusive hand cores change in every active frame
 - action-corridor exterior delta equals zero
-- protected face delta equals zero
+- protected face geometry outside declared expression ROIs has zero delta
 - no duplicate hand, broken finger, ghost sleeve, seam, or prop texture jump
 
 ## Transformation Recipe
@@ -130,6 +151,8 @@ Write fully transparent unused cells. Clear RGB to zero wherever alpha is zero. 
 
 Do not resize the composed sheet. Resize or align sources once before frame assembly and use one shared transform for the entire animation family.
 
+If generation used a neutral segmentation background, treat it only as a production aid. Recover real alpha, clear hidden RGB, and inspect the result on both dark and light backgrounds. A checkerboard painted into RGB is not transparency. Background removal must preserve fine permanent elements and reject grid-boundary fragments without deleting legitimate ribbons or effects.
+
 ## Repository Tools
 
 `scripts/validate_sprite_sheet.py` provides a preliminary per-sheet check and creates a contact sheet plus GIF:
@@ -159,6 +182,7 @@ At minimum, record these values per animation:
 - first/last canonical maximum delta
 - symmetric-pair maximum delta
 - protected-region maximum delta
+- expression-ROI and protected-face-exterior delta
 - static-region RGBA maximum delta and MAE
 - changed-pixel count inside each intended action core
 - full-frame luminance and warm/cool drift
@@ -187,6 +211,7 @@ Inspect every artifact independently. Reject:
 - face, hair, torso, instrument, or costume contamination
 - effects that fragment, touch edges, or leave fade residue
 - final-to-idle flash cuts
+- permanent accessories appearing late, disappearing early, changing material, or crossing the wrong body/prop depth
 
 Do not accept an animation only because its JSON report says `ok: true`.
 
@@ -204,6 +229,8 @@ Validate configuration through the application's `sprite.validateModel()` path. 
 For macOS global keys, confirm Input Monitoring for the exact built `.app`. Ad-hoc rebuilds can change the code-directory hash and invalidate an older authorization even when the bundle path and identifier stay the same.
 
 After packaging, compare SHA-256 of source and bundled `model.json`, cover, and every sprite sheet. Verify the running process executable is inside the new bundle rather than an older build or installed copy.
+
+Build the hash list from the manifests, including module-local animation paths. A top-level file with the same basename does not prove the runtime-loaded `modules/<id>/sprites/` file was updated.
 
 ## Reproducibility
 

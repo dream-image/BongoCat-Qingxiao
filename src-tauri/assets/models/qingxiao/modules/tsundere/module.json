@@ -80,6 +80,11 @@
       "priority": 34,
       "cooldownMs": 12000,
       "interruptible": true,
+      "audio": {
+        "file": "@model/audio/common-voice-08-question.wem",
+        "delayMs": 100,
+        "volume": 0.88
+      },
       "dialogue": {
         "chance": 1,
         "delayMs": 100,
@@ -91,24 +96,10 @@
         "lines": [
           {
             "text": {
-              "zh-CN": "哼。",
-              "en-US": "Hmph."
+              "zh-CN": "……有什么不妥吗？",
+              "en-US": "...Is something wrong?"
             },
-            "weight": 3
-          },
-          {
-            "text": {
-              "zh-CN": "才没有在等你。",
-              "en-US": "I wasn't waiting for you."
-            },
-            "weight": 2
-          },
-          {
-            "text": {
-              "zh-CN": "有事直说。",
-              "en-US": "Say what you want."
-            },
-            "weight": 2
+            "weight": 1
           }
         ]
       }

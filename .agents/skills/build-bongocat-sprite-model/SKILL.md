@@ -28,6 +28,8 @@ Resolve these facts from the request and references:
 - model id, display name, and `standard`, `keyboard`, or `gamepad` mode
 - canonical canvas size; default to `512×512` for detailed Q-style characters
 - fixed character identity, costume, prop, seated pose, palette, and transparent silhouette
+- permanent attached elements such as ribbons, tails, wings, ornaments, or back pieces, including their stable depth order
+- allowed expression regions such as eyes, brows, cheeks, and lips; approval of a character template does not approve its background or temporary effects
 - idle behavior
 - reusable action poses and their key groups
 - special actions such as Enter transformation
@@ -70,6 +72,8 @@ Never ask an image model to create the final production sprite sheet or every ti
 
 Generated strips and poses are donors, not automatically valid final frames. Preserve the canonical frame everywhere outside the intended motion/effect mask.
 
+Permanent costume or silhouette elements belong to the canonical character. Do not repair a missing ribbon, tail, wing, or ornament by displaying a separate overlay before or during an otherwise unrelated sheet; that produces two visual materials and discontinuous occlusion. If a donor omits a permanent element, use only its local pose/expression region and keep the canonical element in every production frame.
+
 ## Build Animation Frames Deterministically
 
 Use one canonical RGBA frame as the fixed geometry and color source.
@@ -90,6 +94,12 @@ Use one canonical RGBA frame as the fixed geometry and color source.
 - Composite only within per-action hand/sleeve corridors. Protect the face, hair, torso, instrument, and background.
 - Define separate left- and right-hand masks and exclusive cores. Never infer hand ownership by splitting the canvas at its center.
 - Reuse each approved action for up to four keys.
+
+### Face And Speech Motion
+
+- Eyes, brows, cheeks, and lips may change when the action matrix declares an expression or mouth motion.
+- Replace only the approved expression ROIs; keep face outline, feature proportions, hairline, skin material, lighting, and head position canonical.
+- Do not treat the whole face as protected when speech or emotion is required, and do not replace the whole generated face just to obtain a different mouth.
 
 ### Transformation
 
@@ -150,11 +160,12 @@ Required temporal gates:
 
 - idle changes only inside its approved feature mask
 - action static regions have zero pixel change
-- protected face and prop regions have zero unintended change
+- protected face geometry and prop regions have zero unintended change; declared eye/brow/cheek/lip ROIs may change intentionally
 - both intended hands move in every active pose
 - symmetric return frames match exactly
 - transformation position and character alpha remain stable
 - no global brightness, palette, texture, or outline flicker occurs outside the intended region
+- every permanent attached element is present from the first through final frame with consistent material and occlusion
 
 Generate a contact sheet, checkerboard GIF using the real configured durations, and a difference visualization for every animation. Inspect them at both native size and the app's normal display size. A script reporting `ok: true` never replaces visual playback QA.
 
@@ -167,6 +178,8 @@ Before installation:
 3. Confirm the default animation exists.
 4. Confirm model id uniqueness among preset sprite models.
 5. Run the app's `sprite.validateModel()` path through actual sprite loading; do not treat an import-success toast alone as proof.
+
+When promoting regenerated resources, resolve every final file from `model.json` and each module's `module.json`. Do not assume a top-level `sprites/<name>.webp` is used when the manifest points to `modules/<id>/sprites/<name>.webp`; duplicate files with the same basename are not aliases.
 
 Do not run `scripts/stabilize_sprite_sheet.py` unchanged on a new character. It contains character-specific masks, donors, thresholds, and transformation logic. Parameterize or replace those parts for the new model, keep raw inputs immutable, and write results to a new output directory. Never feed stabilized outputs back as raw inputs unless the pipeline proves byte-for-byte idempotence.
 

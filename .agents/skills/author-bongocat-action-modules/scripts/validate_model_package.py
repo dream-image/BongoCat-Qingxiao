@@ -13,6 +13,7 @@ import json
 import math
 import re
 import stat
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,8 +35,10 @@ MAX_MODULE_ACTIONS = 128
 MAX_MODULE_TRIGGERS = 256
 MAX_TOTAL_ACTIONS = 512
 MAX_TOTAL_TRIGGERS = 256
+MAX_AUDIO_FILES = 64
+MAX_AUDIO_FILE_BYTES = 8 * 1024 * 1024
+MAX_AUDIO_SAMPLES = 48_000 * 30
 MAX_SHEET_PIXELS = 16 * 1024 * 1024
-MAX_TOTAL_PIXELS = 64 * 1024 * 1024
 MAX_TIMER = 2_147_483_647
 SAFE_ID = re.compile(r"^[\da-z][\w.-]*$", re.ASCII)
 LOCAL_TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -64,6 +67,7 @@ class Validation:
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.animations: dict[str, dict[str, Any]] = {}
+        self.audio_files: set[Path] = set()
         self.total_pixels = 0
         self.module_actions = 0
         self.module_triggers = 0
@@ -79,6 +83,7 @@ class Validation:
             "ok": not self.errors,
             "modelDirectory": str(self.model_dir),
             "animationCount": len(self.animations),
+            "audioFileCount": len(self.audio_files),
             "totalSpritePixels": self.total_pixels,
             "moduleActionCount": self.module_actions,
             "moduleTriggerCount": self.module_triggers,
@@ -369,6 +374,73 @@ def validate_dialogue(
     return True
 
 
+def validate_audio(
+    validation: Validation,
+    raw: Any,
+    label: str,
+    module_dir: Path,
+) -> None:
+    audio = expect_object(validation, raw, label)
+    if audio is None:
+        return
+    allowed_keys(validation, audio, {"file", "chance", "delayMs", "volume"}, label)
+    chance = audio.get("chance", 1)
+    volume = audio.get("volume", 1)
+    if not is_positive(chance) or chance > 1:
+        validation.error(f"{label}.chance must be in (0, 1]")
+    if not is_positive(volume) or volume > 1:
+        validation.error(f"{label}.volume must be in (0, 1]")
+    if not is_timer(audio.get("delayMs", 0), allow_zero=True):
+        validation.error(f"{label}.delayMs must be a non-negative timer value")
+
+    raw_file = audio.get("file")
+    if isinstance(raw_file, str) and raw_file.startswith("@model/"):
+        asset = resolve_asset(
+            validation,
+            validation.model_dir,
+            raw_file.removeprefix("@model/"),
+            f"{label}.file",
+        )
+    else:
+        asset = resolve_asset(validation, module_dir, raw_file, f"{label}.file")
+    if asset is None:
+        return
+    # 与运行时一致，重复引用同一个已解析文件只占一个音频名额。
+    validation.audio_files.add(asset.resolve())
+    if asset.stat().st_size > MAX_AUDIO_FILE_BYTES:
+        validation.error(f"{label}.file exceeds {MAX_AUDIO_FILE_BYTES} bytes")
+        return
+    if asset.suffix.lower() != ".wem":
+        return
+
+    # 应用目前直接解码新版 Wwise Opus WEM；预检同样拒绝看似 WEM、运行时却无法播放的其他 codec。
+    try:
+        data = asset.read_bytes()
+        if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+            raise ValueError("not a little-endian RIFF/WAVE")
+        offset = 12
+        format_offset = None
+        while offset + 8 <= len(data):
+            chunk_id = data[offset:offset + 4]
+            chunk_size = struct.unpack_from("<I", data, offset + 4)[0]
+            chunk_offset = offset + 8
+            if chunk_offset + chunk_size > len(data):
+                raise ValueError("chunk exceeds file")
+            if chunk_id == b"fmt ":
+                format_offset = chunk_offset
+                break
+            offset = chunk_offset + chunk_size + (chunk_size & 1)
+        if format_offset is None or struct.unpack_from("<H", data, format_offset)[0] != 0x3041:
+            raise ValueError("codec is not Wwise Opus 0x3041")
+        channels = struct.unpack_from("<H", data, format_offset + 2)[0]
+        samples = struct.unpack_from("<I", data, format_offset + 0x18)[0]
+        mapping = data[format_offset + 0x23]
+        if channels not in {1, 2} or mapping != 0 or not 0 < samples <= MAX_AUDIO_SAMPLES:
+            raise ValueError("channel mapping or duration is unsupported")
+    except (IndexError, OSError, struct.error, ValueError) as error:
+        validation.error(f"{label}.file is not a supported Wwise Opus WEM: {error}")
+
+
 def validate_timer_range(validation: Validation, value: Any, label: str) -> None:
     if (
         not isinstance(value, list)
@@ -616,7 +688,7 @@ def validate_module(
         action = expect_object(validation, raw_action, f"module {module_id}.actions.{action_id}")
         if action is None:
             continue
-        allowed_keys(validation, action, {"label", "animation", "priority", "cooldownMs", "interruptible", "dialogue"}, f"module {module_id}.actions.{action_id}")
+        allowed_keys(validation, action, {"label", "animation", "priority", "cooldownMs", "interruptible", "dialogue", "audio"}, f"module {module_id}.actions.{action_id}")
         actions.add(action_id)
         if "label" in action:
             validate_localized(validation, action["label"], f"module {module_id}.actions.{action_id}.label")
@@ -641,6 +713,13 @@ def validate_module(
             f"module {module_id}.actions.{action_id}.dialogue",
             getattr(validation, "canvas"),
         )
+        if "audio" in action:
+            validate_audio(
+                validation,
+                action["audio"],
+                f"module {module_id}.actions.{action_id}.audio",
+                module_path.parent,
+            )
         if animation_ref is None and not has_dialogue:
             validation.error(f"module {module_id}.actions.{action_id} needs animation or dialogue")
         priority = action.get("priority", 0)
@@ -827,10 +906,9 @@ def validate_package(model_dir: Path) -> Validation:
 
     if len(validation.animations) > MAX_ANIMATIONS:
         validation.error(f"model has {len(validation.animations)} animations; maximum is {MAX_ANIMATIONS}")
-    if validation.total_pixels > MAX_TOTAL_PIXELS:
-        validation.error(
-            f"model uses {validation.total_pixels} sprite pixels; maximum is {MAX_TOTAL_PIXELS}"
-        )
+    if len(validation.audio_files) > MAX_AUDIO_FILES:
+        validation.error(f"model has {len(validation.audio_files)} audio files; maximum is {MAX_AUDIO_FILES}")
+    # 总像素继续写入报告供作者评估内存，但不拒绝大型可扩展模型；单张资源上限仍在 validate_animation 中执行。
     if validation.module_actions > MAX_TOTAL_ACTIONS:
         validation.error(f"model has more than {MAX_TOTAL_ACTIONS} module actions")
     if validation.module_triggers > MAX_TOTAL_TRIGGERS:

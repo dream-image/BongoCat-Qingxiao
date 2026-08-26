@@ -37,6 +37,14 @@ export interface PetModuleActionV1 {
   cooldownMs?: number
   interruptible?: boolean
   dialogue?: PetModuleDialogueV1
+  audio?: PetModuleAudioV1
+}
+
+export interface PetModuleAudioV1 {
+  file: string
+  chance?: number
+  delayMs?: number
+  volume?: number
 }
 
 export interface PetModuleDialogueV1 {
@@ -195,6 +203,13 @@ export interface PetRuntimeDialogue {
   }>
 }
 
+export interface PetRuntimeAudio {
+  file: string
+  chance: number
+  delayMs: number
+  volume: number
+}
+
 export interface PetRuntimeAction {
   id: string
   moduleId: string
@@ -204,6 +219,7 @@ export interface PetRuntimeAction {
   cooldownMs: number
   interruptible: boolean
   dialogue?: PetRuntimeDialogue
+  audio?: PetRuntimeAudio
 }
 
 interface PetRuntimeTriggerBase {
@@ -571,6 +587,7 @@ function normalizeModule(
     availableAnimations,
     new Set(Object.keys(localAnimations)),
     context.canvas,
+    moduleDirectory,
   )
   const actionIds = new Set(actions.map(action => action.id))
   const triggers = normalizeTriggers(
@@ -651,6 +668,7 @@ function normalizeActions(
   animations: Record<string, PetBehaviorModuleAnimationConfig>,
   localAnimationIds: Set<string>,
   canvas: PetBehaviorModuleLoadContext['canvas'],
+  moduleDirectory: string[],
 ) {
   assertRecord(value, `${moduleLabel}.actions`)
 
@@ -668,7 +686,7 @@ function normalizeActions(
     assertRecord(rawAction, label)
     assertAllowedKeys(
       rawAction,
-      ['label', 'animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue'],
+      ['label', 'animation', 'priority', 'cooldownMs', 'interruptible', 'dialogue', 'audio'],
       label,
     )
 
@@ -711,7 +729,11 @@ function normalizeActions(
     const dialogue = rawAction.dialogue === undefined
       ? undefined
       : normalizeDialogue(rawAction.dialogue, label, canvas)
+    const audio = rawAction.audio === undefined
+      ? undefined
+      : normalizeAudio(rawAction.audio, label, moduleDirectory)
 
+    // 音频只增强一个已有动作，不单独决定状态机时长；否则无法从配置判断何时释放动作队列。
     if (!animation && !dialogue) {
       throw new TypeError(`${label} must define animation or dialogue`)
     }
@@ -731,8 +753,52 @@ function normalizeActions(
         ? true
         : assertBoolean(rawAction.interruptible, `${label}.interruptible`),
       dialogue,
+      audio,
     } satisfies PetRuntimeAction
   })
+}
+
+function normalizeAudio(
+  value: unknown,
+  actionLabel: string,
+  moduleDirectory: string[],
+): PetRuntimeAudio {
+  const label = `${actionLabel}.audio`
+
+  assertRecord(value, label)
+  assertAllowedKeys(value, ['file', 'chance', 'delayMs', 'volume'], label)
+  assertNonEmptyString(value.file, `${label}.file`)
+
+  let fileParts: string[]
+
+  if (value.file.startsWith('@model/')) {
+    // 共享语音放在模型根目录时使用 @model/；不带前缀的路径仍相对当前模组，保持可移植性。
+    fileParts = assertSafeRelativePath(value.file.slice('@model/'.length), `${label}.file`)
+  } else {
+    fileParts = [
+      ...moduleDirectory,
+      ...assertSafeRelativePath(value.file, `${label}.file`),
+    ]
+  }
+
+  const chance = value.chance === undefined
+    ? 1
+    : assertPositiveNumber(value.chance, `${label}.chance`)
+  const volume = value.volume === undefined
+    ? 1
+    : assertPositiveNumber(value.volume, `${label}.volume`)
+
+  if (chance > 1) throw new RangeError(`${label}.chance cannot exceed 1`)
+  if (volume > 1) throw new RangeError(`${label}.volume cannot exceed 1`)
+
+  return {
+    file: fileParts.join(sep()),
+    chance,
+    delayMs: value.delayMs === undefined
+      ? 0
+      : assertTimerDelay(value.delayMs, true, `${label}.delayMs`),
+    volume,
+  }
 }
 
 function normalizeDialogue(

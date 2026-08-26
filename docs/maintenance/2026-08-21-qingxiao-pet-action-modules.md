@@ -4,6 +4,8 @@
 - 工作分支：`codex/pet-behavior-hardening`
 - 大体内容：在既有按键模型之上增加可导入的宠物动作模组、主动右键菜单、独立对白气泡，以及启动问候、久别归来、输入爆发、连续工作、每日时段等可扩展被动触发器；清宵动作资源继续使用逐帧稳定性门禁。
 
+> 2026-08-26 更新：清宵的正式雪碧图已经改为“人物、常驻飘带、表情和口型逐帧统一重画”，不再采用本文早期记录的局部程序合成路线。当前美术生产规则和复现命令以 [2026-08-26 清宵一体化雪碧图重画记录](./2026-08-26-qingxiao-integrated-sprite-redraw.md) 为准；本文后续有关 ROI、donor 和静态区拼接的内容只保留为历史设计记录。
+
 ## 本次实现
 
 宠物能力不再继续堆进单一 `model.json` 数组。模型通过 `behaviors.pet.modules` 引用独立 `module.json`；加载阶段把模块内动画、动作和触发器转换成带模块命名空间的运行时对象，再交给同一个行为控制器仲裁。旧模型未配置 `modules` 时仍沿用原来的 `autonomous` 和 `interactions`。
@@ -17,7 +19,9 @@
 - `src/utils/sprite.ts`：合并模块动画、限制资源预算、播放动作，并绘制独立对白气泡。
 - `src/composables/usePetActionMenu.ts`：把可用的 `manual` 触发器转换为宠物右键二级菜单。
 - `src/pages/main/index.vue`：只在宠物窗口装配菜单；托盘菜单不读取宠物运行时。
-- `scripts/build_qingxiao_pet_sprites.py`：从清宵的稳定 canonical 和既有手势 donor 确定性生成、校验宠物雪碧图。
+- `scripts/build_qingxiao_pet_sprites.py`：旧版局部程序合成器，仅能显式传入 `--legacy-procedural` 做历史排查；不得再用于覆盖当前正式重画资源。
+- `scripts/process_generated_sprite_sheet.py`：从统一重画的源图中提取真实前景、清理临时背景，并输出透明雪碧图及深浅底 QA 图。
+- `scripts/finalize_qingxiao_redraw.py`：统一完整人物帧的动作端点、画布规格和模型封面，保证动作切换不闪回旧姿势。
 
 ## 模组契约
 

@@ -34,6 +34,9 @@ class ModelRuntime {
       // 对话是独立于人物动作的单槽覆盖层；由行为代次负责决定何时显示，渲染器只负责绘制。
       speak: payload => sprite.showSpeechBubble(payload),
       clearSpeech: () => sprite.clearSpeechBubble(),
+      // 精灵模型的 WEM 语音同样由动作代次管理；渲染层负责解码，行为层只负责触发和中断。
+      playAudio: payload => sprite.playAudio(payload),
+      stopAudio: () => sprite.stopAudio(),
     },
     onStateChange: state => this.handlePetBehaviorStateChange(state),
   })
@@ -394,6 +397,7 @@ class ModelRuntime {
 
   public readonly setMotionSoundEnabled = (enabled: boolean) => {
     live2d.setMotionSoundEnabled(enabled)
+    sprite.setMotionSoundEnabled(enabled)
   }
 
   public readonly setMaxFPS = (fps: number) => {
