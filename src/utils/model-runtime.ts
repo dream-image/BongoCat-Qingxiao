@@ -190,6 +190,10 @@ class ModelRuntime {
     if (!pressed && this.petActionKeyboardInputs.delete(inputId)) {
       if (trackInput) this.petBehavior.notifyKeyboardRelease(inputId)
 
+      // 配置化 action 不会调用 handleKeyboardBinding，因此必须在最后一个同映射输入释放时
+      // 单独停止 showKeyboardBubble 启动的长按计时器，避免松开 Enter 后气泡仍持续触发。
+      if (shouldReleaseRenderState) sprite.releaseKeyboardBubble(renderKey)
+
       // 该按键没有写入 pressedSpriteBindings，release 也不能让旧精灵绑定回默认动画。
       result.renderStateChanged = false
 

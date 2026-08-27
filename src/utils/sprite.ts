@@ -407,6 +407,12 @@ class SpriteRenderer {
     return shown
   }
 
+  public releaseKeyboardBubble(key: string) {
+    // 状态感知 action 不进入普通 animation binding 账本，release 时仍必须显式结束
+    // 长按气泡计时器；否则一次按键松开后会永久按 repeatInterval 继续冒泡。
+    this.stopKeyboardBubbleRepeat(key)
+  }
+
   private stopKeyboardBubbleRepeat(key: string) {
     const timer = this.keyboardBubbleRepeatTimers.get(key)
 
