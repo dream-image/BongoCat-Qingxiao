@@ -11,6 +11,8 @@ Re-read these files before implementing because the contract may evolve:
 - `src/pages/preference/components/model/components/upload/index.vue`
 - `src-tauri/assets/models/qingxiao/model.json`
 
+Production code in `src/` and `src-tauri/src/` is model-agnostic. It may branch on renderer type or a validated generic capability, but never on a specific model id/display-name literal, character path, model-authored animation/action id, or character-defined state value. Comparing dynamic model ids for selection, request routing, or stale-event isolation is allowed. Model-specific choices belong in manifests and local resources; explicitly named generation scripts may contain character-specific masks or recipes only because they are offline authoring tools, never runtime dependencies.
+
 ## Folder Contract
 
 Each sprite model is one self-contained directory. Asset paths in `model.json` must be non-empty relative paths, cannot start with `/` or `\`, cannot contain a URI scheme, and cannot contain a `..` segment.
@@ -151,12 +153,14 @@ The state schema and action `stateEffect` contract live in the adjacent `$author
 ### Bindings
 
 - Prefer `bindings.keyboard` and `bindings.mouse`; legacy top-level aliases are accepted but should not be authored in new models.
+- Use `bindings.keyboard` only for direct top-level animation playback. If a key must select animation/dialogue by character state or run a module action, use `behaviors.pet.inputActions.keyboard` with a normalized `<module-id>/<action-id>` instead; never configure both paths for the same key.
 - A keyboard binding may name one animation or an array. An array cycles through its animations on repeated presses of that binding key.
 - `*` is a keyboard or mouse fallback binding.
 - Common keyboard identifiers include `KeyA` through `KeyZ`, `Num0` through `Num9`, `Return`, `Enter`, `KpReturn`, `Space`, `Minus`, and `Equal`.
 - Use exact identifiers emitted by the current Rust input layer. Verify unfamiliar keys in `src-tauri/src/core/device.rs` or runtime logs.
 - In `gamepad` mode, bind ordinary emitted button names in `bindings.keyboard` and test them with the target controller. Do not claim sprite support for stick-axis or thumb-stick-button actions without changing `useGamepad.ts` and the sprite runtime.
 - `Return` and `Enter` alias each other only when no more specific matching entry wins. Bind all of `Return`, `Enter`, and `KpReturn` for consistent Enter behavior.
+- State-aware key actions ignore OS key auto-repeat until release. Temporary transformations need one continuous source-target-source sheet for every possible source form, and the first and final frames must exactly match that source canonical.
 - An unbound keyboard press may still show a bubble without interrupting the current animation.
 - Mouse binding supports exact buttons and `*`, but mouse input does not currently create label bubbles.
 

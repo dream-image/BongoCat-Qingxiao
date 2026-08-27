@@ -106,7 +106,8 @@ def fit_background(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
 
 def extract_rgba(input_path: Path, mask_script: Path) -> Image.Image:
     """用 Vision 蒙版和已知灰底恢复真实 Alpha，同时清理抗锯齿边缘。"""
-    with tempfile.TemporaryDirectory(prefix='qingxiao-mask-') as temporary_directory:
+    # 该处理器可服务任意生成雪碧图，临时目录名也不能暗示只支持某个角色。
+    with tempfile.TemporaryDirectory(prefix='sprite-mask-') as temporary_directory:
         mask_path = Path(temporary_directory) / 'mask.png'
         subprocess.run(
             ['swift', str(mask_script), str(input_path), str(mask_path)],

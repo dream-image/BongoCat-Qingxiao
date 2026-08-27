@@ -13,7 +13,7 @@ import type {
   PetSpeechPayload,
 } from './pet-behavior'
 
-import { PetBehaviorController } from './pet-behavior'
+import { assertPetBehaviorConfig, PetBehaviorController } from './pet-behavior'
 
 interface DeferredPlayback {
   animation: string
@@ -119,7 +119,9 @@ class RecordingPlaybackDriver implements PetPlaybackDriver {
   }
 }
 
-function createStatefulBehaviorConfig(): PetBehaviorConfig {
+function createStatefulBehaviorConfig(
+  initialForm: 'normal' | 'attack' | 'demon' = 'normal',
+): PetBehaviorConfig {
   const config = createBehaviorConfig()
   const routine = config.modules?.[0]
   const wave = routine?.actions[0]
@@ -190,6 +192,25 @@ function createStatefulBehaviorConfig(): PetBehaviorConfig {
       lifetime: { type: 'session' },
     },
   })
+  routine.actions.push({
+    id: 'routine/form-pulse',
+    moduleId: 'routine',
+    animation: 'pet-normal-attack-return',
+    stateAnimations: [
+      { priority: 90, match: { form: 'attack' }, animation: 'pet-attack-demon-return' },
+      { priority: 90, match: { form: 'demon' }, animation: 'pet-demon-normal-return' },
+    ],
+    cooldownMs: 0,
+    interruptible: true,
+    priority: 0,
+  })
+  config.inputActions = {
+    keyboard: {
+      Return: 'routine/form-pulse',
+      Enter: 'routine/form-pulse',
+      KpReturn: 'routine/form-pulse',
+    },
+  }
   routine.triggers.push({
     id: 'routine/manual-bow',
     moduleId: 'routine',
@@ -212,7 +233,7 @@ function createStatefulBehaviorConfig(): PetBehaviorConfig {
     dimensions: {
       activity: { initial: 'awake', values: ['awake', 'relaxed'] },
       mood: { initial: 'calm', values: ['calm', 'happy'] },
-      form: { initial: 'normal', values: ['normal', 'attack', 'demon'] },
+      form: { initial: initialForm, values: ['normal', 'attack', 'demon'] },
     },
     profiles: [
       {
@@ -262,10 +283,10 @@ function createStatefulBehaviorConfig(): PetBehaviorConfig {
   return config
 }
 
-function createStatefulController() {
+function createStatefulController(initialForm: 'normal' | 'attack' | 'demon' = 'normal') {
   const clock = new FakeClock()
   const driver = new RecordingPlaybackDriver()
-  const config = createStatefulBehaviorConfig()
+  const config = createStatefulBehaviorConfig(initialForm)
   const controller = new PetBehaviorController(config, {
     clock,
     driver,
@@ -506,6 +527,57 @@ test('transformed forms select matching transition, action, and steady animation
   // 已处于战斗形态时再次触发，只播放同形态强调动作，不闪回普通人物。
   assert.equal(controller.triggerActionCatalogItem(combat.id), true)
   assert.equal(driver.current?.animation, 'pet-attack-flourish')
+})
+
+test('configured keyboard action temporarily visits the next form and restores its source form', async () => {
+  const cases = [
+    ['normal', 'pet-normal-attack-return', 'pet-idle', 'Return'],
+    ['attack', 'pet-attack-demon-return', 'pet-attack-idle', 'Enter'],
+    ['demon', 'pet-demon-normal-return', 'pet-demon-idle', 'KpReturn'],
+  ] as const
+
+  for (const [form, actionAnimation, steadyAnimation, key] of cases) {
+    const { controller, driver } = createStatefulController(form)
+
+    assert.equal(controller.hasKeyboardAction(key), true)
+    assert.equal(controller.notifyKeyboardActionPress(key, key), true)
+    assert.equal(controller.state, 'pet-action')
+    assert.equal(driver.current?.animation, actionAnimation)
+
+    // 同一物理按压的 key repeat 只能产生按键反馈，不能重启 one-shot 动作。
+    assert.equal(controller.notifyKeyboardActionPress(key, key), true)
+    assert.equal(driver.animations.filter(animation => animation === actionAnimation).length, 1)
+
+    driver.finish()
+    await flushPlaybackContinuation()
+
+    // action 没有 stateEffect；即使 Enter 尚未抬起，也要回来源形态的常态而非默认 idle。
+    assert.equal(controller.state, 'pet-idle')
+    assert.equal(driver.current?.animation, steadyAnimation)
+    assert.equal(controller.notifyKeyboardRelease(key), true)
+  }
+})
+
+test('keyboard input action validation rejects unknown module actions before model playback', () => {
+  const config = createBehaviorConfig()
+  const context = {
+    animations: {
+      'pet-enter': { loop: false },
+      'pet-idle': { loop: true },
+      'pet-exit': { loop: false },
+      'pet-wave': { loop: false },
+    },
+    canvas: { width: 512, height: 512 },
+  }
+
+  config.inputActions = { keyboard: { Enter: 'routine/wave' } }
+  assert.doesNotThrow(() => assertPetBehaviorConfig(config, context))
+
+  config.inputActions.keyboard = { Enter: 'routine/missing' }
+  assert.throws(
+    () => assertPetBehaviorConfig(config, context),
+    /references an unknown module action/,
+  )
 })
 
 test('duration state effects reevaluate and restore the matching steady profile', async () => {

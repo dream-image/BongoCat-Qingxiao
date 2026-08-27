@@ -987,6 +987,87 @@
         90,
         80
       ]
+    },
+    "pet-normal-attack-return": {
+      "file": "sprites/pet-normal-attack-return.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        85,
+        95,
+        110,
+        125,
+        140,
+        160,
+        260,
+        220,
+        160,
+        140,
+        125,
+        110,
+        95,
+        85,
+        80
+      ]
+    },
+    "pet-attack-demon-return": {
+      "file": "sprites/pet-attack-demon-return.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        85,
+        95,
+        110,
+        125,
+        140,
+        160,
+        260,
+        220,
+        160,
+        140,
+        125,
+        110,
+        95,
+        85,
+        80
+      ]
+    },
+    "pet-demon-normal-return": {
+      "file": "sprites/pet-demon-normal-return.webp",
+      "frameWidth": 512,
+      "frameHeight": 512,
+      "frames": 16,
+      "columns": 4,
+      "fps": 12,
+      "loop": false,
+      "frameDurations": [
+        80,
+        85,
+        95,
+        110,
+        125,
+        140,
+        160,
+        260,
+        220,
+        160,
+        140,
+        125,
+        110,
+        95,
+        85,
+        80
+      ]
     }
   },
   "behaviors": {
@@ -995,6 +1076,13 @@
       "enterAnimation": "pet-enter",
       "idleAnimation": "pet-idle",
       "exitAnimation": "pet-exit",
+      "inputActions": {
+        "keyboard": {
+          "Return": "routine/form-pulse",
+          "Enter": "routine/form-pulse",
+          "KpReturn": "routine/form-pulse"
+        }
+      },
       "stateMachine": {
         "dimensions": {
           "activity": {
@@ -1420,10 +1508,7 @@
       "Num9": "pluck-10",
       "Num0": "pluck-10",
       "Minus": "pluck-10",
-      "Equal": "pluck-10",
-      "Return": "transform",
-      "Enter": "transform",
-      "KpReturn": "transform"
+      "Equal": "pluck-10"
     }
   },
   "bubbles": {

@@ -46,6 +46,7 @@ MAX_STATE_PROFILES = 128
 MAX_STATE_RULES = 128
 MAX_STATE_ANIMATION_VARIANTS = 16
 MAX_STATE_DIALOGUE_VARIANTS = 16
+MAX_INPUT_ACTIONS = 128
 SAFE_ID = re.compile(r"^[\da-z][\w.-]*$", re.ASCII)
 STATE_ID = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 LOCAL_TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -955,10 +956,11 @@ def validate_module(
     top_animations: dict[str, dict[str, Any]],
     hit_areas: set[str],
     state_dimensions: dict[str, set[str]],
-) -> str | None:
+    input_action_refs: set[str],
+) -> tuple[str | None, set[str]]:
     module = load_json(validation, module_path, MAX_MODULE_BYTES, f"module {module_path}")
     if module is None:
-        return None
+        return None, set()
     allowed_keys(validation, module, {"version", "id", "displayName", "order", "animations", "actions", "triggers"}, f"module {module_path}")
     if module.get("version") != 1:
         validation.error(f"module {module_path}.version must be 1")
@@ -1080,7 +1082,11 @@ def validate_module(
             actions,
             hit_areas,
         )
-    for action_id in sorted(actions - referenced_actions):
+    input_referenced_actions = {
+        action_id for action_id in actions
+        if f"{module_id}/{action_id}" in input_action_refs
+    }
+    for action_id in sorted(actions - referenced_actions - input_referenced_actions):
         # The runtime schema permits dormant actions, so keep the package valid while making
         # the menu/behavior omission explicit. New deliverables should resolve this warning.
         validation.warning(
@@ -1088,7 +1094,7 @@ def validate_module(
         )
     validation.module_actions += len(actions)
     validation.module_triggers += len(raw_triggers)
-    return module_id
+    return module_id, {f"{module_id}/{action_id}" for action_id in actions}
 
 
 def validate_bindings(
@@ -1118,6 +1124,39 @@ def validate_bindings(
                 validation.error(
                     f"model.bindings.{kind}.{key} references an unknown top-level animation"
                 )
+
+
+def validate_input_actions(validation: Validation, pet: dict[str, Any]) -> set[str]:
+    """Validate behavior-level input bindings and return qualified module action refs."""
+
+    raw_input_actions = pet.get("inputActions")
+    if raw_input_actions is None:
+        return set()
+    input_actions = expect_object(validation, raw_input_actions, "behaviors.pet.inputActions")
+    if input_actions is None:
+        return set()
+    allowed_keys(validation, input_actions, {"keyboard"}, "behaviors.pet.inputActions")
+    keyboard = input_actions.get("keyboard", {})
+    if not isinstance(keyboard, dict):
+        validation.error("behaviors.pet.inputActions.keyboard must be an object")
+        return set()
+    if len(keyboard) > MAX_INPUT_ACTIONS:
+        validation.error(
+            f"behaviors.pet.inputActions.keyboard exceeds {MAX_INPUT_ACTIONS} bindings"
+        )
+
+    references: set[str] = set()
+    for key, action_id in keyboard.items():
+        if not isinstance(key, str) or not key.strip():
+            validation.error("behaviors.pet.inputActions.keyboard keys must be non-empty strings")
+            continue
+        if not isinstance(action_id, str) or not action_id.strip():
+            validation.error(
+                f"behaviors.pet.inputActions.keyboard.{key} must reference a module action"
+            )
+            continue
+        references.add(action_id)
+    return references
 
 
 def validate_package(model_dir: Path) -> Validation:
@@ -1196,6 +1235,7 @@ def validate_package(model_dir: Path) -> Validation:
             validation.error(f"behaviors.pet.{field} loop must be {str(should_loop).lower()}")
     hit_areas = validate_hit_areas(validation, pet.get("hitAreas"), canvas_size)
     state_dimensions = validate_state_machine(validation, pet.get("stateMachine"), top_animations)
+    input_action_refs = validate_input_actions(validation, pet)
 
     references = pet.get("modules")
     if not isinstance(references, list) or not references:
@@ -1205,6 +1245,7 @@ def validate_package(model_dir: Path) -> Validation:
         validation.error(f"behaviors.pet.modules exceeds {MAX_MODULES}")
     sources: set[str] = set()
     module_ids: set[str] = set()
+    module_action_ids: set[str] = set()
     for index, raw_reference in enumerate(references):
         label = f"behaviors.pet.modules[{index}]"
         reference = expect_object(validation, raw_reference, label)
@@ -1227,17 +1268,26 @@ def validate_package(model_dir: Path) -> Validation:
         if module_path.suffix.lower() != ".json":
             validation.error(f"{label}.source must reference JSON")
             continue
-        module_id = validate_module(
+        module_id, action_ids = validate_module(
             validation,
             module_path,
             top_animations,
             hit_areas,
             state_dimensions,
+            input_action_refs,
         )
         if module_id in module_ids:
             validation.error(f"module id {module_id!r} is duplicated")
         if module_id is not None:
             module_ids.add(module_id)
+        module_action_ids.update(action_ids)
+
+    for action_id in sorted(input_action_refs - module_action_ids):
+        # Runtime bindings target normalized "module/action" ids. Failing package validation here
+        # prevents an apparently clickable key from becoming a silent no-op after import.
+        validation.error(
+            f"behaviors.pet.inputActions references unknown module action {action_id!r}"
+        )
 
     if len(validation.animations) > MAX_ANIMATIONS:
         validation.error(f"model has {len(validation.animations)} animations; maximum is {MAX_ANIMATIONS}")

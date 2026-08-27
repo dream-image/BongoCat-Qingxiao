@@ -491,6 +491,100 @@
         }
       ]
     },
+    "form-pulse": {
+      "label": {
+        "zh-CN": "一念化形",
+        "en-US": "Momentary transformation"
+      },
+      "animation": "@model/pet-normal-attack-return",
+      "priority": 48,
+      "cooldownMs": 0,
+      "interruptible": true,
+      "dialogue": {
+        "chance": 1,
+        "delayMs": 180,
+        "durationMs": 2100,
+        "anchor": {
+          "x": 350,
+          "y": 166
+        },
+        "lines": [
+          {
+            "text": {
+              "zh-CN": "战意借形，一念即收。",
+              "en-US": "Battle intent takes shape, then fades with a thought."
+            },
+            "weight": 1
+          }
+        ]
+      },
+      "stateAnimations": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "animation": "@model/pet-attack-demon-return"
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "animation": "@model/pet-demon-normal-return"
+        }
+      ],
+      "stateDialogues": [
+        {
+          "priority": 90,
+          "match": {
+            "form": "attack"
+          },
+          "dialogue": {
+            "chance": 1,
+            "delayMs": 180,
+            "durationMs": 2100,
+            "anchor": {
+              "x": 350,
+              "y": 166
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "心魔？不过一念之间。",
+                  "en-US": "A heart-demon? Merely a passing thought."
+                },
+                "weight": 1
+              }
+            ]
+          }
+        },
+        {
+          "priority": 90,
+          "match": {
+            "form": "demon"
+          },
+          "dialogue": {
+            "chance": 1,
+            "delayMs": 180,
+            "durationMs": 2100,
+            "anchor": {
+              "x": 350,
+              "y": 166
+            },
+            "lines": [
+              {
+                "text": {
+                  "zh-CN": "本相未失，收放由心。",
+                  "en-US": "My true self remains; form follows my will."
+                },
+                "weight": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
     "curious-after-pause": {
       "label": {
         "zh-CN": "空闲好奇",
@@ -900,6 +994,21 @@
         "en-US": "Routine"
       },
       "order": 70,
+      "enterPet": true
+    },
+    {
+      "id": "manual-form-pulse",
+      "type": "manual",
+      "action": "form-pulse",
+      "label": {
+        "zh-CN": "一念化形",
+        "en-US": "Momentary transformation"
+      },
+      "group": {
+        "zh-CN": "日常作息",
+        "en-US": "Routine"
+      },
+      "order": 80,
       "enterPet": true
     },
     {

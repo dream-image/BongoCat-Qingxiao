@@ -123,11 +123,18 @@ export type PetInteractionConfig
     | PetTapInteractionConfig
     | PetStrokeInteractionConfig
 
+export interface PetInputActionsConfig {
+  // 这里绑定的是行为模块 action，而不是雪碧图 animation；因此动作可以按人物状态选图，
+  // 播放结束后也由状态机恢复当前形态，模型无需把角色专属规则写进运行时。
+  keyboard?: Record<string, string>
+}
+
 export interface PetBehaviorConfig {
   activationDelayMs: number
   enterAnimation: string
   idleAnimation: string
   exitAnimation: string
+  inputActions?: PetInputActionsConfig
   autonomous?: PetAutonomousBehaviorConfig
   hitAreas?: Record<string, PetHitArea>
   interactions?: PetInteractionConfig[]
@@ -175,6 +182,7 @@ export interface PetAudioPayload {
 
 export type PetActionSource
   = | 'manual'
+    | 'keyboard'
     | 'pointer'
     | 'active-session'
     | 'schedule'
@@ -322,6 +330,7 @@ const PET_MAX_STATE_RULES = 128
 const PET_MAX_STATE_DATES = 64
 const PET_MAX_STATE_ANIMATION_VARIANTS = 16
 const PET_MAX_STATE_DIALOGUE_VARIANTS = 16
+const PET_MAX_INPUT_ACTIONS = 128
 const PET_STATE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 // 内部合成模组使用外部 safe-id 永远无法表达的前缀，从根上避免导入模块覆盖兼容配置。
 const PET_LEGACY_MODULE_ID = '@legacy'
@@ -663,26 +672,7 @@ export class PetBehaviorController {
   public notifyKeyboardPress(key: string) {
     if (this.destroyed) return false
 
-    const isFirstPress = !this.activeKeyboardInputs.has(key)
-
-    if (isFirstPress) {
-      this.activeKeyboardInputs.add(key)
-      this.markSemanticInteraction(false)
-      this.passiveEngine.notifyActivity({
-        inputId: key,
-        phase: 'start',
-        source: getPassiveActivitySource(key),
-      })
-
-      if (this.activeKeyboardInputs.size === 1 && !this.menuPaused) {
-        this.clearOperationalTimers()
-        this.resetIdleEpoch()
-        this.pendingAction = void 0
-        this.pendingPassiveOccurrences = []
-        this.invalidateActionMenu()
-        this.clearSpeech()
-      }
-    }
+    const isFirstPress = this.recordKeyboardPress(key)
 
     // 原生菜单的方向键/回车也会经过全局 hook；只记物理按压，不能让它们关闭自己正在操作的菜单。
     if (this.menuPaused) return false
@@ -695,6 +685,26 @@ export class PetBehaviorController {
     if (isFirstPress) void this.exitForInput()
 
     return true
+  }
+
+  public hasKeyboardAction(key: string) {
+    return this.resolveKeyboardActionId(key) !== void 0
+  }
+
+  public notifyKeyboardActionPress(inputId: string, key: string) {
+    if (this.destroyed) return false
+
+    const actionId = this.resolveKeyboardActionId(key)
+
+    if (!actionId) return false
+
+    const isFirstPress = this.recordKeyboardPress(inputId)
+
+    // 原生菜单中的 Enter 只负责确认菜单项；ModelRuntime 正常不会调用到这里，控制器仍保留
+    // 这一层门禁，避免将来新增输入入口时菜单确认意外触发模型动作。
+    if (this.menuPaused || !isFirstPress) return true
+
+    return this.requestAction(actionId, 'keyboard', true, false)
   }
 
   public notifyKeyboardRelease(key: string) {
@@ -722,6 +732,31 @@ export class PetBehaviorController {
     // 菜单关闭时导航键可能仍 held，当时的恢复会刻意关闭引擎。
     // 最后一键 release 必须覆盖所有宠物态，否则取消菜单可让自主计时永久停摆。
     this.scheduleOperationalTimers()
+
+    return true
+  }
+
+  private recordKeyboardPress(key: string) {
+    const isFirstPress = !this.activeKeyboardInputs.has(key)
+
+    if (!isFirstPress) return false
+
+    this.activeKeyboardInputs.add(key)
+    this.markSemanticInteraction(false)
+    this.passiveEngine.notifyActivity({
+      inputId: key,
+      phase: 'start',
+      source: getPassiveActivitySource(key),
+    })
+
+    if (this.activeKeyboardInputs.size === 1 && !this.menuPaused) {
+      this.clearOperationalTimers()
+      this.resetIdleEpoch()
+      this.pendingAction = void 0
+      this.pendingPassiveOccurrences = []
+      this.invalidateActionMenu()
+      this.clearSpeech()
+    }
 
     return true
   }
@@ -1215,7 +1250,7 @@ export class PetBehaviorController {
       priority: this.sourcePriority(source) + action.priority,
       enterPet,
     }
-    const isExplicitAction = source === 'manual'
+    const isExplicitAction = source === 'manual' || source === 'keyboard'
 
     if (this.currentState === 'work-idle') {
       if (!enterPet) return false
@@ -1286,7 +1321,7 @@ export class PetBehaviorController {
       enterPet,
     }
 
-    if (source === 'manual') {
+    if (source === 'manual' || source === 'keyboard') {
       if (this.currentState === 'work-idle' || this.currentState === 'pet-exiting') {
         return enterPet
       }
@@ -1834,6 +1869,7 @@ export class PetBehaviorController {
     // 每档相隔 100，高于动作配置的 0…99，确保来源优先级不会被模型局部 priority 反转。
     return {
       'manual': 1_000,
+      'keyboard': 1_000,
       'pointer': 900,
       'active-session': 800,
       'schedule': 700,
@@ -1847,20 +1883,21 @@ export class PetBehaviorController {
   }
 
   private isActionOperational(action: PetRuntimeAction, source: PetActionSource) {
-    const runtimeReady = source === 'manual'
+    const isExplicitSource = source === 'manual' || source === 'keyboard'
+    const runtimeReady = isExplicitSource
       ? this.canRunManualAction()
       : this.canRun()
 
-    if (!runtimeReady || (this.menuPaused && source !== 'manual')) return false
+    if (!runtimeReady || (this.menuPaused && !isExplicitSource)) return false
     // 鼠标不进入键盘空闲闸门，但所有被动来源仍必须等拖拽/长按结束；主动菜单和指针交互不受影响。
-    if (source !== 'manual'
+    if (!isExplicitSource
       && source !== 'pointer'
       && this.passiveEngine.hasActiveInputs) {
       return false
     }
     if (this.moduleActions.get(action.id) !== action) return false
 
-    return source === 'manual'
+    return isExplicitSource
       || this.clock.now() >= (this.cooldowns.get(action.id) ?? 0)
   }
 
@@ -1905,7 +1942,9 @@ export class PetBehaviorController {
     this.setState(request.source === 'pointer' ? 'pet-interaction' : 'pet-action')
 
     // 先切换播放阶段再更新语义状态，防止 pet-idle 的即时重绘打断刚启动的一次性动作。
-    if (request.source === 'manual' || request.source === 'pointer') {
+    if (request.source === 'manual'
+      || request.source === 'keyboard'
+      || request.source === 'pointer') {
       this.markSemanticInteraction()
     }
     if (request.action.stateEffect?.when === 'started') {
@@ -1927,6 +1966,17 @@ export class PetBehaviorController {
 
     if (!this.canRun()) {
       this.pendingAction = void 0
+
+      if (activeAction?.source === 'keyboard'
+        && this.canRunManualAction()
+        && this.behaviorConfig) {
+        // 动作按键本身仍处于 held 状态时，通用 canRun 会关闭被动调度；但显式动作已经
+        // 完成，必须立即回当前形态常态，不能误走 exit/defaultAnimation 闪回普通形态。
+        this.setState('pet-idle')
+        this.playSteadyAnimation()
+
+        return
+      }
 
       if (activeAction?.source === 'manual'
         && this.canRunManualAction()
@@ -2216,6 +2266,28 @@ export class PetBehaviorController {
     const selected = this.selectActionStateVariant(action.stateDialogues, values)
 
     return selected?.dialogue ?? action.dialogue
+  }
+
+  private resolveKeyboardActionId(key: string) {
+    const keyboard = this.behaviorConfig?.inputActions?.keyboard
+
+    if (!keyboard) return undefined
+
+    // macOS hook 可能把主回车报告为 Return 或 Enter；数字小键盘则是 KpReturn。
+    // 配置可显式区分三者，缺省时只在 Return/Enter 之间做兼容，不把小键盘偷偷合并。
+    const candidates = key === 'Return'
+      ? ['Return', 'Enter']
+      : key === 'Enter'
+        ? ['Enter', 'Return']
+        : [key]
+
+    for (const candidate of candidates) {
+      const actionId = keyboard[candidate]
+
+      if (typeof actionId === 'string') return actionId
+    }
+
+    return undefined
   }
 
   private selectActionStateVariant<T extends {
@@ -2590,8 +2662,10 @@ export function assertPetBehaviorConfig(
     )
   }
 
+  let runtimeActionIds = new Set<string>()
+
   if (value.modules !== void 0) {
-    assertRuntimeModuleGraph(
+    runtimeActionIds = assertRuntimeModuleGraph(
       value.modules,
       semanticBindings,
       legacyActionCount,
@@ -2599,6 +2673,39 @@ export function assertPetBehaviorConfig(
       value.stateMachine,
       context,
     )
+  }
+
+  if (value.inputActions !== void 0) {
+    assertRecord(value.inputActions, 'Pet behavior inputActions')
+    assertAllowedPetStateKeys(
+      value.inputActions,
+      ['keyboard'],
+      'Pet behavior inputActions',
+    )
+
+    if (value.inputActions.keyboard !== void 0) {
+      assertRecord(value.inputActions.keyboard, 'Pet behavior inputActions.keyboard')
+      const entries = Object.entries(value.inputActions.keyboard)
+
+      if (entries.length > PET_MAX_INPUT_ACTIONS) {
+        throw new RangeError(
+          `Pet behavior inputActions.keyboard cannot exceed ${PET_MAX_INPUT_ACTIONS}`,
+        )
+      }
+
+      for (const [key, actionId] of entries) {
+        assertNonEmptyString(key, 'Pet behavior inputActions.keyboard key')
+        assertNonEmptyString(actionId, `Pet behavior inputActions.keyboard.${key}`)
+
+        // 外部模块会先展开成规范化 runtime action；此处在图片解码前拒绝悬空引用，
+        // 避免用户按键后只看到气泡却没有任何动作反馈。
+        if (!runtimeActionIds.has(actionId)) {
+          throw new TypeError(
+            `Pet behavior inputActions.keyboard.${key} references an unknown module action`,
+          )
+        }
+      }
+    }
   }
 }
 
@@ -2614,6 +2721,7 @@ function assertRuntimeModuleGraph(
 
   let totalActions = initialActionCount
   let totalTriggers = initialTriggerCount
+  const actionIds = new Set<string>()
 
   for (const [moduleIndex, candidate] of value.entries()) {
     const label = `Pet behavior modules[${moduleIndex}]`
@@ -2640,6 +2748,12 @@ function assertRuntimeModuleGraph(
 
     for (const action of candidate.actions) {
       assertRecord(action, `${label}.actions`)
+      assertNonEmptyString(action.id, `${label}.actions.id`)
+
+      if (actionIds.has(action.id)) {
+        throw new TypeError(`${label}.actions.id duplicates ${action.id}`)
+      }
+      actionIds.add(action.id)
 
       if (action.stateEffect !== undefined) {
         assertRuntimeStateEffect(action.stateEffect, stateMachine, `${label}.actions.stateEffect`)
@@ -2673,6 +2787,8 @@ function assertRuntimeModuleGraph(
       semanticBindings.add(semanticBinding)
     }
   }
+
+  return actionIds
 }
 
 function assertPetStateMachineConfig(

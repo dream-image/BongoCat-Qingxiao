@@ -83,6 +83,7 @@
 - startup 只触发一次
 - idle 从最后一个输入释放后开始
 - keyboard auto-repeat 不被 activity-burst 重复计数
+- `inputActions.keyboard` 的 one-shot 在按住按键时只启动一次，并按来源状态选中正确变体、结束后回来源形态常态
 - active-session 在 quiet 后执行并按 reset 切分会话
 - visibility-return 不被右键菜单、hover 隐藏或 resize 伪造
 - daily-window/schedule 使用本地日期时间且同一 occurrence 不重复

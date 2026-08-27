@@ -45,6 +45,13 @@
       "enterAnimation": "pet-enter",
       "idleAnimation": "pet-idle",
       "exitAnimation": "pet-exit",
+      "inputActions": {
+        "keyboard": {
+          "Return": "effects/temporary-transform",
+          "Enter": "effects/temporary-transform",
+          "KpReturn": "effects/temporary-transform"
+        }
+      },
       "hitAreas": {},
       "modules": [
         { "source": "modules/routine/module.json", "enabled": true }
@@ -55,6 +62,12 @@
 ```
 
 `enterAnimation` 和 `exitAnimation` 必须是非循环动画；`idleAnimation` 必须循环。它们都必须位于顶层 `animations`。模块 action 只能引用非循环动画。
+
+`bindings.keyboard` 直接绑定顶层 animation，适合普通按键姿势；`behaviors.pet.inputActions.keyboard` 绑定规范化后的 `<module-id>/<action-id>`，适合需要读取人物状态、播放对白或按形态选图的按键动作。两者不要为同一个键重复配置。主回车应同时列出 `Return`、`Enter`、`KpReturn`；运行时仅把 `Return` 与 `Enter` 互作回退，不会擅自把小键盘回车合并。键盘 action 的自动重复不会重复启动 one-shot，抬键后才允许下一次触发。
+
+临时形态展示应由一个没有 `stateEffect` 的 action 完成：基础 `animation` 表示默认来源状态，`stateAnimations` 表示其他来源状态；每张 sheet 自身必须从来源 canonical 连续变化到目标形态再回来源 canonical。若动作结束后应真正改变长期形态，才配置 `stateEffect`，不要把“临时展示”和“持久切换”混在同一个 action。
+
+生产运行时必须与具体模型解耦：`src/`、`src-tauri/src/` 不得与具体模型 id/显示名常量、角色资源路径、模型自定义 module/action/animation id 或 dimension/value 写条件分支。运行时可以比较两个动态模型 id 来完成选择、请求路由和过期事件隔离，但不能知道任一角色的具体 id。角色名称和状态值只属于模型 JSON、明确命名的资产生成脚本、测试夹具及维护文档。新增模型能力时应扩展通用 schema 和校验器，不能增加“如果是某模型”的例外。
 
 Hit area 支持：
 

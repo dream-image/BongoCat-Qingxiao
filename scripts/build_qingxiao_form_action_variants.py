@@ -15,6 +15,12 @@ from PIL import Image, ImageDraw, ImageFilter
 
 FRAME_SIZE = 512
 TRANSITION_PROGRESS = (0.0, 0.12, 0.32, 0.62, 0.86, 1.0, 1.0, 1.0)
+# Enter 的形态展示是一次完整往返；用单条连续进度生成，避免把两个 one-shot 串起来时
+# 在目标形态处重复首尾帧，造成肉眼可见的停顿或第二段动画感。
+ROUND_TRIP_PROGRESS = (
+    0.0, 0.08, 0.18, 0.35, 0.58, 0.78, 0.94, 1.0,
+    1.0, 0.94, 0.78, 0.58, 0.35, 0.18, 0.08, 0.0,
+)
 
 
 @dataclass(frozen=True)
@@ -291,6 +297,15 @@ def transition_frames(start: np.ndarray, end: np.ndarray) -> list[np.ndarray]:
     return frames
 
 
+def round_trip_frames(start: np.ndarray, target: np.ndarray) -> list[np.ndarray]:
+    """从来源形态连续展示目标形态后回到来源形态，语义状态不发生改变。"""
+
+    frames = [blend_frame(start, target, progress) for progress in ROUND_TRIP_PROGRESS]
+    frames[0] = start.copy()
+    frames[-1] = start.copy()
+    return frames
+
+
 def flourish_frames(canonical: np.ndarray, form: str) -> list[np.ndarray]:
     progress_values = (0.0, 0.25, 0.55, 0.8, 0.8, 0.55, 0.25, 0.0)
     frames = []
@@ -438,6 +453,11 @@ def build(model_dir: Path, work_dir: Path, report_path: Path) -> None:
         ('pet-demon-flourish', 'sprites/pet-demon-flourish.webp', flourish_frames(demon, 'demon'), demon, demon),
         ('pet-attack-to-normal', 'sprites/pet-attack-to-normal.webp', transition_frames(attack, normal), attack, normal),
         ('pet-demon-to-normal', 'sprites/pet-demon-to-normal.webp', transition_frames(demon, normal), demon, normal),
+        # 三条往返动画只负责可见展示；最终形态由状态机 action 的来源快照决定，
+        # 因此首尾必须严格等于同一个 canonical，且 action 配置不能附带 stateEffect。
+        ('pet-normal-attack-return', 'sprites/pet-normal-attack-return.webp', round_trip_frames(normal, attack), normal, normal),
+        ('pet-attack-demon-return', 'sprites/pet-attack-demon-return.webp', round_trip_frames(attack, demon), attack, attack),
+        ('pet-demon-normal-return', 'sprites/pet-demon-normal-return.webp', round_trip_frames(demon, normal), demon, demon),
     )
     for name, relative_path, frames, first, last in transition_specs:
         result = save_verified_sheet(model_dir, relative_path, frames, 4, first, last)
@@ -445,6 +465,15 @@ def build(model_dir: Path, work_dir: Path, report_path: Path) -> None:
 
     save_contact_sheet(model_dir, attack_contacts, work_dir / 'qa/attack-actions-contact.png')
     save_contact_sheet(model_dir, demon_contacts, work_dir / 'qa/demon-actions-contact.png')
+    save_contact_sheet(
+        model_dir,
+        [
+            ('normal -> attack -> normal', 'sprites/pet-normal-attack-return.webp'),
+            ('attack -> demon -> attack', 'sprites/pet-attack-demon-return.webp'),
+            ('demon -> normal -> demon', 'sprites/pet-demon-normal-return.webp'),
+        ],
+        work_dir / 'qa/form-round-trips-contact.png',
+    )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 

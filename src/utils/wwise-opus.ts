@@ -45,7 +45,7 @@ export function parseWwiseOpusWem(bytes: Uint8Array, maxSamples: number): WwiseO
   const codecVersion = view.getUint8(format.offset + 0x22)
   const mapping = view.getUint8(format.offset + 0x23)
 
-  // 清宵资源是标准 mono；先明确支持 Wwise 的 mono/stereo mapping 0，避免错误声道映射静默出错。
+  // mapping 0 的标准 mono/stereo 可以安全直解；其他声道映射必须显式支持，不能静默误解码。
   if ((channels !== 1 && channels !== 2) || mapping !== 0) {
     throw new RangeError('Only mono/stereo Wwise Opus mapping 0 audio is supported')
   }

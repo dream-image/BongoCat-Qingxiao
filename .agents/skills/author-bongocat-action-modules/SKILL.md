@@ -98,7 +98,11 @@ The top-level `behaviors.pet` owns lifecycle animations and hit areas. Each modu
 - if a passive action should also be user-triggerable, add a separate `manual` trigger pointing to the same action
 - never hardcode model action ids in Vue, TypeScript, Rust, or native menu code
 
+Keep the production runtime model-agnostic. Code under `src/` and `src-tauri/src/` must never branch on a specific model id/display-name literal, character asset path, model-authored module/action/animation id, or character-defined state dimension/value. Runtime branches may depend only on generic renderer capabilities and validated schema fields. Comparing two runtime-provided model ids for selection, request routing, or stale-event isolation is allowed because it does not encode knowledge of a character. Character-specific names belong in the model package, explicitly scoped authoring scripts, documentation, or test fixtures; a new model capability must be expressed through configuration rather than another model-specific `if` or `switch`.
+
 When the character needs awake/relaxed/sleeping, mood, or transformation continuity, declare `behaviors.pet.stateMachine` and let looping Visual Profiles own steady animation selection. Add `stateEffect` only to actions that genuinely change a state; ordinary gestures should remain temporary and return to the latest matching profile. If a persistent form changes the character's visible material or silhouette, give every reusable action a `stateAnimations` variant for that form and author dedicated source-form transitions. Use `stateDialogues` when that form should also speak with a distinct tone; animation and dialogue variants must match the same source-state snapshot. Do not let a transformed character flash the normal sheet, create a second trigger queue, or encode character-specific state names in application code.
+
+When a physical key must run a state-aware module action, bind it through `behaviors.pet.inputActions.keyboard` to the normalized `<module-id>/<action-id>`. Keep ordinary pose-only keys in `bindings.keyboard`. A temporary keyboard transformation should use one continuous round-trip sheet per source state, select those sheets with `stateAnimations`, and omit `stateEffect`; key auto-repeat must not restart the one-shot action.
 
 ## Generate Action Animation Safely
 
@@ -126,7 +130,7 @@ BONGOCAT_PYTHON="/absolute/path/from/load_workspace_dependencies/python3"
   --report /absolute/path/to/qa/model-package-report.json
 ```
 
-This validator checks package structure, safe paths, JSON references, animation grids, pixel budgets, lifecycle bindings, state machines, action effects and state-selected action variants, module actions, trigger references, dialogue anchors, and required cover art. It does not replace the application's TypeScript validators or visual QA.
+This validator checks package structure, safe paths, JSON references, animation grids, pixel budgets, lifecycle and state-aware input bindings, state machines, action effects and state-selected action variants, module actions, trigger references, dialogue anchors, and required cover art. It does not replace the application's TypeScript validators or visual QA.
 
 Then complete all of these gates:
 
@@ -135,7 +139,7 @@ Then complete all of these gates:
 3. Import the complete folder through **设置 → 模型管理 → 导入**, then verify the stored renderer remains `sprite` and switch to it.
 4. Open the pet right-click menu and verify active actions are second-level and passive actions are third-level; trigger every menu item once. Repeat at least one manual action from work-idle and while enter, action, and exit playback are active; every explicit selection must take effect without waiting for a hidden pending lifecycle.
 5. Trigger the same catalog item from Model Management. Right-click and settings previews share the catalog contract and must both work on the first click.
-6. Test pointer areas, short test versions of passive timers, lifecycle entry/exit, keyboard interruption, dialogue placement, mirror mode, window scaling, and model switching. When input monitoring is unavailable, manual actions must remain usable while passive scheduling stays inactive.
+6. Test pointer areas, short test versions of passive timers, lifecycle entry/exit, keyboard interruption, configured `inputActions.keyboard`, dialogue placement, mirror mode, window scaling, and model switching. For a state-aware key, test every source-state variant, held-key auto-repeat, and restoration of the source profile. When input monitoring is unavailable, manual actions must remain usable while passive scheduling stays inactive.
 7. For actions with audio, test the motion-sound switch, delayed start, interruption, model switching, and every bundled WEM with `pnpm test`. Dialogue text and fixed recorded speech must not contradict each other.
 8. Restore production timer values after accelerated testing and rerun validation.
 9. Rebuild the app, compare source and bundled model resource hashes using the paths actually resolved by each manifest, and launch the newly built executable when the user requests a packaged preset.
@@ -150,6 +154,7 @@ Do not report success until:
 - all active and passive actions appear at the required menu depth
 - first-click and repeated manual actions remain responsive across lifecycle transitions
 - state rules select the expected looping profile, interrupted actions do not commit finished effects, and completed temporary actions return to the latest profile without flashing the old idle
+- every configured state-aware input resolves to a real module action, ignores key auto-repeat for action playback, and restores the source-state profile
 - at least one real trigger of each configured type is observed in the app
 - import, switching, input interruption, dialogue/audio cleanup, motion-sound toggling, and model reload work in the real UI
 

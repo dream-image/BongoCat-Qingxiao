@@ -24,6 +24,9 @@ class ModelRuntime {
   private resumePressedBindingsAfterManualAction = false
   // 菜单期间按下的物理键仍需成对记账，但必须与可渲染绑定隔离到 release 到来为止。
   private readonly menuSuppressedKeyboardInputs = new Set<string>()
+  // 配置化行为按键由状态机完整接管，不能再落入旧的 animation binding 路径；单独记账
+  // 是为了让同一次物理 down 的自动重复只显示按键反馈，而不会重复启动一次性动作。
+  private readonly petActionKeyboardInputs = new Set<string>()
   // inputId 表示物理输入身份，value 表示当前模型映射出的动画键。二者分离后，切模型时可以
   // 保留“仍按住”的事实，再用新模型配置重映射，而不会伪造一次新的按键和气泡。
   private readonly activeKeyboardInputs = new Map<string, string | undefined>()
@@ -184,6 +187,15 @@ class ModelRuntime {
       return result
     }
 
+    if (!pressed && this.petActionKeyboardInputs.delete(inputId)) {
+      if (trackInput) this.petBehavior.notifyKeyboardRelease(inputId)
+
+      // 该按键没有写入 pressedSpriteBindings，release 也不能让旧精灵绑定回默认动画。
+      result.renderStateChanged = false
+
+      return result
+    }
+
     if (!pressed) {
       if (trackInput) this.petBehavior.notifyKeyboardRelease(inputId)
 
@@ -194,6 +206,17 @@ class ModelRuntime {
         this.resumePressedBindingsAfterManualAction = false
       }
       sprite.handleKeyboardBinding(renderKey, false, !this.petBehavior.isPetActive)
+
+      return result
+    }
+
+    if (this.petBehavior.hasKeyboardAction(renderKey)) {
+      this.petActionKeyboardInputs.add(inputId)
+      sprite.showKeyboardBubble(renderKey, label ?? void 0)
+
+      if (!wasInputActive) {
+        this.petBehavior.notifyKeyboardActionPress(inputId, renderKey)
+      }
 
       return result
     }
@@ -429,6 +452,7 @@ class ModelRuntime {
     this.pressedSpriteBindings.clear()
     // 切模/销毁后旧菜单的 release 不应继续命中特殊分支，否则会污染新模型的输入账本。
     this.menuSuppressedKeyboardInputs.clear()
+    this.petActionKeyboardInputs.clear()
   }
 
   private adoptExplicitPetAction(accepted: boolean) {
