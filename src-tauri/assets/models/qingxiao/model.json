@@ -31,170 +31,190 @@
       "file": "sprites/pluck-01.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-02": {
       "file": "sprites/pluck-02.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-03": {
       "file": "sprites/pluck-03.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-04": {
       "file": "sprites/pluck-04.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-05": {
       "file": "sprites/pluck-05.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-06": {
       "file": "sprites/pluck-06.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-07": {
       "file": "sprites/pluck-07.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
-        90,
-        90,
-        90,
-        90,
-        30
+        50,
+        70,
+        70,
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-08": {
       "file": "sprites/pluck-08.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-09": {
       "file": "sprites/pluck-09.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "pluck-10": {
       "file": "sprites/pluck-10.webp",
       "frameWidth": 512,
       "frameHeight": 512,
-      "frames": 6,
-      "columns": 3,
+      "frames": 8,
+      "columns": 4,
       "fps": 15,
       "loop": false,
       "frameDurations": [
-        30,
+        50,
         70,
-        110,
-        110,
         70,
-        30
+        70,
+        100,
+        70,
+        70,
+        250
       ]
     },
     "transform": {
@@ -447,12 +467,12 @@
       "fps": 8,
       "loop": true,
       "frameDurations": [
-        700,
-        700,
-        700,
-        700,
+        4200,
         100,
-        700
+        55,
+        45,
+        55,
+        120
       ]
     },
     "pet-exit": {
@@ -598,12 +618,12 @@
       "fps": 12,
       "loop": true,
       "frameDurations": [
-        700,
-        700,
-        700,
-        700,
+        4200,
         100,
-        700
+        55,
+        45,
+        55,
+        120
       ]
     },
     "pet-attack-content": {

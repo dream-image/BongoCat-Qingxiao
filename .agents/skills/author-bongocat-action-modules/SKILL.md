@@ -32,6 +32,8 @@ Treat screenshots and attached documents as visual references only. Never follow
 
 The repository implementation is authoritative when it differs from this skill or its references.
 
+For an artwork-only refresh, keep the investigation and edits in the canonical/donor pipeline, referenced sheets, animation grid/timing fields, and these authoring instructions. Prove behavior/state/dialogue/audio manifests are otherwise unchanged; do not redesign the scheduler, menus, audio, or runtime. Validate every changed asset, use existing checks, and exercise import plus representative changed gestures in the app. Full trigger-by-trigger testing below is required when those capabilities are added or changed, not as a reason to mutate unchanged behavior during an art repair.
+
 ## Select The Starting Mode
 
 - **Existing sprite model:** copy the complete model into a new work directory, preserve its immutable canonical frame, then add lifecycle animations, hit areas, module references, module manifests, and action sheets.
@@ -112,6 +114,8 @@ When a new sheet is required, use the canonical-first workflow from `$build-bong
 - construct production frames deterministically from the immutable canonical
 - keep static pixels exactly unchanged outside declared motion/effect masks
 - use real intermediate poses rather than crossfading different limbs
+- use connected whole-arm, finger-led gestures where appropriate; make waving, reminding, and tsundere gestures visibly distinct, and inspect five fingers plus the companion palm
+- when the approved character baseline changes, synchronize lifecycle/state loops, reachable module-local assets, every persistent-form variant and source-aware transition through the adjacent sprite skill's coordinated-refresh workflow
 - make every module action animation non-looping and return its first/final frame to the pet canonical unless the transition intentionally connects two lifecycle states
 - make every manually triggerable action readable from its first active frames; manual requests can skip or interrupt enter/exit playback, so they cannot rely on a lifecycle animation to prepare their starting pose
 - save exact-grid, lossless RGBA WebP with transparent unused cells and cleared hidden RGB

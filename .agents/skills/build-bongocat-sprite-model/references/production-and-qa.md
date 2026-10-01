@@ -11,7 +11,7 @@ Choose one approved transparent RGBA frame as canonical. It owns:
 - transparent padding
 - every permanent attached element and its depth relationship to the body and prop
 
-Never average several AI frames into the canonical source. Never independently fit, center, color-match, or scale each timeline frame.
+Never average several AI frames into the canonical source. Never independently fit, center, color-match, or scale each final timeline frame. Native donor patches may need rigid registration against a fixed shoulder or forehead anchor before local extraction; keep the source family's scale shared and never turn donor registration into per-frame whole-character fitting.
 
 Do not split a visually integrated character into a base sheet plus a separately generated permanent overlay. Ribbons, tails, wings, ornaments, back pieces, and similar elements must share the canonical material, lighting, position, and occlusion in every frame. A reference image approved as a character template does not make its background, composition, or temporary effect part of the model.
 
@@ -72,9 +72,11 @@ Acceptance:
 - normal awake idle remains open-eyed; closed eyes are reserved for blink, sleep, or an intentional expression
 - no feature-size drift, face-shape breathing, skin-tone flash, or lip position jump
 
-## Two-Hand Action Recipe
+## Whole-Arm, Finger-Led Action Recipe
 
-Use a six-frame symmetric layout unless the requested motion needs more frames:
+Use the approved character and the gesture's phrasing to choose native key poses. For instrument playing, the forearm guides the wrist while thumb/index/middle fingers hook, flick, and recover at different phases. Preserve expressive connected arm motion; a fixed arm with a moving wrist is not an equivalent repair.
+
+A simple gesture may use a symmetric layout:
 
 ```text
 0 canonical
@@ -85,7 +87,7 @@ Use a six-frame symmetric layout unless the requested motion needs more frames:
 5 canonical
 ```
 
-Use real pose donors for frames 1 and 2. If a gesture is small, an identical intermediate and peak may be acceptable only when normal-size playback remains smooth.
+Use real intermediate donors where the motion needs them. A finger-led pluck may use a non-symmetric sequence with several distinct finger shapes. Frame count alone is not smoothness: inspect adjacent poses at actual durations and normal display size.
 
 For every action:
 
@@ -100,9 +102,10 @@ Do not crop companion hands at `canvasWidth / 2`. A hand or sleeve may cross the
 Acceptance:
 
 - first and last frames equal canonical exactly
-- frame 1 equals frame 4 and frame 2 equals frame 3
-- at least two distinct active poses exist for a visible gesture
-- both exclusive hand cores change in every active frame
+- mirrored frames match exactly only when the selected recipe is symmetric
+- finger shape changes independently of palm position when the gesture calls for articulation
+- five-finger anatomy, full palms, and connected wrists hold throughout the gesture, including the resting companion hand
+- every hand intended to move has distinct poses in its exclusive core; an intentionally resting companion hand retains its full canonical palm
 - action-corridor exterior delta equals zero
 - protected face geometry outside declared expression ROIs has zero delta
 - no duplicate hand, broken finger, ghost sleeve, seam, or prop texture jump
@@ -149,7 +152,7 @@ cellY = floor(index / columns) * frameHeight
 
 Write fully transparent unused cells. Clear RGB to zero wherever alpha is zero. Save WebP losslessly with exact transparent RGB preservation when the encoder supports it.
 
-Do not resize the composed sheet. Resize or align sources once before frame assembly and use one shared transform for the entire animation family.
+Do not resize the composed sheet. Use a shared source scale before assembly. Where native donors drift, record only the rigid translation needed to register a fixed anatomical anchor before extracting the local patch. Do not scale individual poses by their changing silhouette or recenter final frames.
 
 If generation used a neutral segmentation background, treat it only as a production aid. Recover real alpha, clear hidden RGB, and inspect the result on both dark and light backgrounds. A checkerboard painted into RGB is not transparency. Background removal must preserve fine permanent elements and reject grid-boundary fragments without deleting legitimate ribbons or effects.
 
@@ -240,3 +243,18 @@ Build the hash list from the manifests, including module-local animation paths. 
 - Make preservation guards test fixed semantic regions, not self-derived motion unions.
 - Reject a supposedly two-hand sequence when only one hand corridor changes.
 - Rerun the pipeline on its declared raw inputs and compare decoded frame hashes before calling it reproducible.
+
+## Coordinated Refresh And Cleanup
+
+For an approved canonical replacement, inventory actual top-level and module-local animation paths first. Keep existing action ids, bindings, state effects, dialogue, and audio unless their behavior is explicitly changing. Rebuild every affected steady loop, gesture, form variant, and transition against the new baseline; keep sleep restrained and gestures semantically distinct. Compare idle/action handoffs and form-specific open/closed eyes on light and dark backgrounds before promotion.
+
+Retain the current canonical, raw native donors, masks/recipe, referenced audio, and any original reference still required to reproduce approved effects. Determine unused package assets from manifest references plus authoring-script callers, not filenames or age. Replace package files only after full validation. Retire rejected work copies, duplicate outputs, and caches after the replacement is verified; prefer moving resolved obsolete directories to Trash, and report what was removed and how to recover it.
+
+The 2026-10-01 Qingxiao flat-motion refresh is authored by `scripts/refresh_qingxiao_motion.py`. It reads immutable inputs from the selected model folder's `references/motion/` and writes all manifest-reachable sheets plus real-duration QA:
+
+```bash
+"$BONGOCAT_PYTHON" scripts/refresh_qingxiao_motion.py \
+  --model-dir "$WORK_MODEL_DIR" --qa-dir "$QA_DIR"
+```
+
+Run it on a work copy, not the installed model. Its masks and registration belong to Qingxiao, not a generic character API. Older Qingxiao builders encode earlier geometry; do not chain them after this refresh. Preserve trigger/state/dialogue/audio configuration during artwork-only work, and verify source-form transitions plus all module-local material variants.
